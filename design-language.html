@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Brunian Lifts — Design Language v2.1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,600&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0D12;--bg2:#0F1218;--panel:#14171F;--panel2:#1B1F29;--panel3:#232936;
+  --line:#272E3B;--soft:rgba(242,239,231,.07);--gridline:rgba(242,239,231,.10);
+  --ink:#F2EFE7;--ink2:#C9C3B4;--muted:#98A0AE;--faint:#69707E;
+  --gold:#D9A94E;--gold2:#F0C46F;--goldDim:#57431F;--goldGhost:rgba(217,169,78,.12);
+  /* PROPOSED: semantic tokens so colour meaning lives in one place, not 130 inline styles */
+  --pos:#7FCF9B;--neg:#E08585;--warn:#F0C46F;--info:#7DA4FF;
+  --disp:"Fraunces",Georgia,serif;--body:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-lg:22px;--r-md:15px;--r-sm:11px;
+  --e:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(ellipse 60% 34% at 22% -6%,rgba(217,169,78,.13),transparent),radial-gradient(ellipse 42% 26% at 100% 4%,rgba(125,164,255,.06),transparent),linear-gradient(180deg,#0D1016,#090B0F)}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+.wrap{max-width:660px;margin:0 auto;padding:26px 18px 80px}
+.eyebrow{font-size:10.5px;letter-spacing:1.9px;text-transform:uppercase;color:var(--gold2);font-weight:800}
+h1{font-family:var(--disp);font-weight:600;font-size:34px;line-height:1.05;margin:8px 0 4px}
+h1 em{font-style:italic;color:var(--gold2)}
+.lede{color:var(--muted);font-size:14px;line-height:1.55;max-width:52ch}
+.tag{display:inline-block;margin-top:10px;border:1px solid var(--goldDim);color:var(--gold2);background:var(--goldGhost);border-radius:999px;padding:5px 11px;font-size:11px;font-weight:800;letter-spacing:.4px}
+.sec{margin:34px 0 12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-top:1px solid var(--line);padding-top:16px}
+.sec h2{margin:0;font-family:var(--disp);font-weight:600;font-style:italic;color:var(--ink2);font-size:17px}
+.sec .n{font-family:var(--mono);color:var(--faint);font-size:11px}
+.card{border:1px solid var(--line);border-radius:var(--r-lg);background:rgba(20,23,31,.92);padding:16px;box-shadow:0 14px 34px rgba(0,0,0,.14)}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:1fr 1fr}
+.note{color:var(--faint);font-size:12px;line-height:1.5;margin-top:8px}
+.b4a{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800}
+
+/* palette */
+.sw{height:54px;border-radius:10px;border:1px solid var(--line);display:flex;align-items:flex-end;padding:7px;font-family:var(--mono);font-size:10px;color:#0b0d12;font-weight:700}
+.sw.d{color:var(--ink)}
+.swrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.swlab{font-size:9.5px;color:var(--faint);margin-top:4px;font-family:var(--mono)}
+
+/* type scale */
+.ts{display:flex;align-items:baseline;gap:14px;padding:9px 0;border-bottom:1px solid var(--soft)}
+.ts:last-child{border-bottom:0}
+.ts .m{font-family:var(--mono);color:var(--faint);font-size:10px;width:120px;flex:0 0 auto}
+
+/* icon system — the biggest missing lever */
+.icons{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:4px}
+.ic{display:grid;place-items:center;gap:6px;padding:12px 6px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel)}
+.ic svg{width:24px;height:24px;stroke:var(--gold2);stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.ic span{font-size:9.5px;color:var(--faint);font-family:var(--mono)}
+
+/* elevated chart */
+.chart{width:100%;height:auto;display:block}
+.chart .area{fill:url(#ag)}
+.chart .line{fill:none;stroke:url(#lg);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1000;stroke-dashoffset:1000;animation:draw 1.4s var(--e) forwards}
+.chart .fcast{fill:none;stroke:var(--gold2);stroke-width:2;stroke-dasharray:4 5;opacity:.75}
+.chart .fband{fill:rgba(217,169,78,.10)}
+.chart .goal{stroke:var(--gold2);stroke-dasharray:3 5;opacity:.5}
+.chart .grid{stroke:var(--gridline)}
+.chart .dot{fill:var(--gold2)}
+.chart text{fill:var(--faint);font-family:var(--mono);font-size:10px}
+@keyframes draw{to{stroke-dashoffset:0}}
+
+/* unified position card (fixes the 5-stat wrap) */
+.pos{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:14px}
+.pos-h{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.pos-name{font-weight:800;font-size:14px}
+.rating{border:1px solid currentColor;border-radius:999px;padding:5px 10px;font-size:10px;font-weight:800;letter-spacing:.5px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:2px 12px;margin-top:12px}
+.stat .v{font-family:var(--mono);font-weight:700;font-size:15px}
+.stat .k{font-size:9px;letter-spacing:.6px;text-transform:uppercase;color:var(--faint);font-weight:800;margin-top:2px}
+
+/* rest ring */
+.ringwrap{display:flex;align-items:center;gap:16px}
+.ring{transform:rotate(-90deg)}
+.ring .track{stroke:var(--soft);fill:none;stroke-width:9}
+.ring .prog{stroke:var(--gold2);fill:none;stroke-width:9;stroke-linecap:round;stroke-dasharray:283;stroke-dashoffset:70;animation:ring 60s linear forwards}
+@keyframes ring{to{stroke-dashoffset:283}}
+.ring-t{font-family:var(--mono);font-weight:700;font-size:22px}
+
+/* first-run hero — empty as invitation */
+.firstrun{border:1px solid var(--goldDim);border-radius:var(--r-lg);background:linear-gradient(158deg,rgba(217,169,78,.14),rgba(20,23,31,.96));padding:24px 20px;text-align:center;position:relative;overflow:hidden}
+.firstrun:before{content:"";position:absolute;inset:-40% 60% auto -20%;height:220px;background:radial-gradient(circle,rgba(217,169,78,.18),transparent 70%)}
+.firstrun h3{font-family:var(--disp);font-weight:600;font-size:24px;margin:12px 0 6px;position:relative}
+.firstrun p{color:var(--muted);font-size:13px;margin:0 auto;max-width:36ch;position:relative}
+.cta{display:inline-block;margin-top:16px;border-radius:var(--r-md);padding:13px 22px;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1A1206;font-weight:800;box-shadow:0 12px 26px rgba(217,169,78,.2);position:relative}
+
+/* OVR count-up + radar draw */
+.ovr{font-family:var(--mono);font-size:58px;font-weight:700;letter-spacing:-2px;line-height:1;color:var(--gold2)}
+.radar polygon.cur{fill:rgba(217,169,78,.22);stroke:var(--gold2);stroke-width:2.5;transform-origin:center;transform:scale(.01);animation:grow 1s var(--e) .2s forwards}
+@keyframes grow{to{transform:scale(1)}}
+.radar text{fill:var(--muted);font-family:var(--body);font-weight:800;font-size:10px}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chip{border:1px solid currentColor;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;letter-spacing:.4px}
+.mono{font-family:var(--mono)} .g{color:var(--pos)} .r{color:var(--neg)}
+.press{transition:transform .12s var(--e)} .press:active{transform:scale(.96)}
+.banner{border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:var(--r-md);background:var(--panel);padding:13px 15px;font-size:12.5px;line-height:1.5;color:var(--ink2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="eyebrow">Design language · v2.1</div>
+  <h1>The Brunian <em>instrument</em></h1>
+  <p class="lede">Not a restyle — an extension of the existing ink-and-gold ledger. Same palette, same faces, same barbell signature. What changes: a real icon set, a motion language, unified data components, and states designed as invitations. This page is a static reference — open it to see the direction.</p>
+  <div class="tag">Everything below uses only the tokens already in the app</div>
+
+  <div class="sec"><h2>Palette — formalised</h2><span class="n">token</span></div>
+  <div class="card">
+    <div class="swrow">
+      <div><div class="sw" style="background:#0B0D12;color:#F2EFE7">0B0D12</div><div class="swlab">--bg ink</div></div>
+      <div><div class="sw" style="background:#14171F;color:#F2EFE7">14171F</div><div class="swlab">--panel</div></div>
+      <div><div class="sw" style="background:#D9A94E">D9A94E</div><div class="swlab">--gold</div></div>
+      <div><div class="sw" style="background:#F0C46F">F0C46F</div><div class="swlab">--gold2</div></div>
+      <div><div class="sw" style="background:#7FCF9B">7FCF9B</div><div class="swlab">--pos</div></div>
+      <div><div class="sw" style="background:#E08585">E08585</div><div class="swlab">--neg</div></div>
+      <div><div class="sw" style="background:#7DA4FF">7DA4FF</div><div class="swlab">--info</div></div>
+      <div><div class="sw d" style="background:#232936">232936</div><div class="swlab">--panel3</div></div>
+    </div>
+    <p class="note">New: <b style="color:var(--ink2)">semantic tokens</b> (--pos / --neg / --warn / --info). Today colour meaning is injected inline in ~130 places via <code>scoreColor()</code>. Moving it to tokens is aesthetic <i>and</i> functional: one source of truth, consistent meaning, themeable.</p>
+  </div>
+
+  <div class="sec"><h2>Type scale</h2><span class="n">3 roles</span></div>
+  <div class="card">
+    <div class="ts"><span class="m">Fraunces 600 · 34</span><span style="font-family:var(--disp);font-size:26px">Strength ledger</span></div>
+    <div class="ts"><span class="m">Fraunces italic · 17</span><span style="font-family:var(--disp);font-style:italic;font-size:17px;color:var(--ink2)">Weekly review</span></div>
+    <div class="ts"><span class="m">Inter 800 · 13</span><span style="font-weight:800">Barbell Bench Press</span></div>
+    <div class="ts"><span class="m">Inter 400 · 13</span><span style="color:var(--muted)">Beat these numbers to move the score.</span></div>
+    <div class="ts"><span class="m">JetBrains 700 · 15</span><span class="mono" style="font-weight:700">96.0 · +2.9%/wk</span></div>
+    <p class="note">Display carries personality (Fraunces), body stays quiet (Inter), data is monospaced (JetBrains) so numbers align in tables. Already in the app — this just pins the scale.</p>
+  </div>
+
+  <div class="sec"><h2>Icon system</h2><span class="n">the missing lever</span></div>
+  <div class="card">
+    <div class="icons">
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 9v6M20 9v6M7 7v10M17 7v10M7 12h10"/></svg><span>lift</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16M8 15l3-4 3 2 4-6"/></svg><span>portfolio</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"/><path d="M12 13V9M12 2h0M9 2h6"/></svg><span>timer</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M6 4h12v4a6 6 0 0 1-12 0zM6 6H4v1a3 3 0 0 0 2 3M18 6h2v1a3 3 0 0 1-2 3"/></svg><span>PR</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg><span>calendar</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="18" r="2"/></svg><span>coach</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 3 8-9"/><path d="M15 6h5v5"/></svg><span>analyst</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg><span>settings</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>add</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg><span>done</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M21 3l-9 9"/></svg><span>sync</span></div>
+      <div class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M9 20V4M14 20v-7M19 20V8"/></svg><span>volume</span></div>
+    </div>
+    <p class="note">One stroke weight (1.7), one cap style, gold-on-panel. Icons replace the current text-only nav, tool grid, section headers and the unicode glyphs (‹ ✓ → −) used 52× across screens. This is the single biggest jump in perceived quality — the app currently ships <b style="color:var(--ink2)">zero UI icons</b>.</p>
+  </div>
+
+  <div class="sec"><h2>Charts — elevated</h2><span class="n">one component</span></div>
+  <div class="card">
+    <svg class="chart" viewBox="0 0 340 150" aria-label="e1RM trend with forecast">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#D9A94E"/><stop offset="1" stop-color="#F0C46F"/></linearGradient>
+        <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(217,169,78,.22)"/><stop offset="1" stop-color="rgba(217,169,78,0)"/></linearGradient>
+      </defs>
+      <line class="grid" x1="24" y1="126" x2="316" y2="126"/>
+      <line class="goal" x1="24" y1="34" x2="316" y2="34"/>
+      <polygon class="area" points="24,126 24,104 80,92 136,86 192,66 248,58 248,126"/>
+      <polygon class="fband" points="248,52 316,34 316,58 248,64"/>
+      <polyline class="line" points="24,104 80,92 136,86 192,66 248,58"/>
+      <polyline class="fcast" points="248,58 316,46"/>
+      <circle class="dot" cx="24" cy="104" r="3"/><circle class="dot" cx="80" cy="92" r="3"/><circle class="dot" cx="136" cy="86" r="3"/><circle class="dot" cx="192" cy="66" r="3"/><circle class="dot" cx="248" cy="58" r="3"/>
+      <text x="24" y="14">goal 100</text><text x="256" y="30">forecast ±</text>
+    </svg>
+    <p class="note">Gradient stroke, round caps, gradient area fill, dashed forecast + noise band, animated draw on entry. Same SVG the Progression model already builds — this is the shared chart style applied to every graph (trend, radar, net-worth, bodyweight).</p>
+  </div>
+
+  <div class="sec"><h2>Position card</h2><span class="n">fixes stat wrap</span></div>
+  <div class="grid g2">
+    <div class="pos press">
+      <div class="pos-h"><div class="pos-name">Barbell Bench Press</div><div class="rating" style="color:var(--pos)">BUY</div></div>
+      <div class="stats">
+        <div class="stat"><div class="v">96.0</div><div class="k">e1RM</div></div>
+        <div class="stat"><div class="v g">+2.9%</div><div class="k">ret/wk</div></div>
+        <div class="stat"><div class="v">1.22</div><div class="k">consist</div></div>
+        <div class="stat"><div class="v">0.0%</div><div class="k">draw</div></div>
+      </div>
+    </div>
+    <div class="pos press">
+      <div class="pos-h"><div class="pos-name">Standing Overhead Press</div><div class="rating" style="color:var(--info)">SWAP</div></div>
+      <div class="stats">
+        <div class="stat"><div class="v">54.0</div><div class="k">e1RM</div></div>
+        <div class="stat"><div class="v r">−0.4%</div><div class="k">ret/wk</div></div>
+        <div class="stat"><div class="v">0.31</div><div class="k">consist</div></div>
+        <div class="stat"><div class="v r">−6.5%</div><div class="k">draw</div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Current Portfolio crams five mono stats into a wrapping flex row that ragged-wraps on a phone. A fixed 4-up labelled grid reads instantly and aligns across cards. Same data, real hierarchy.</p>
+
+  <div class="sec"><h2>Rest timer — a ring</h2><span class="n">glanceable</span></div>
+  <div class="card ringwrap">
+    <svg width="96" height="96" class="ring" viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="45"/><circle class="prog" cx="50" cy="50" r="45"/></svg>
+    <div><div class="b4a">Rest</div><div class="ring-t">0:47</div><div class="note" style="margin-top:4px">Depletes clockwise; ring goes gold→amber near zero.</div></div>
+  </div>
+  <p class="note">Replaces the flat mm:ss bar. A depleting ring is readable at arm's length mid-set without reading digits — aesthetics doing a functional job.</p>
+
+  <div class="sec"><h2>First run — an invitation</h2><span class="n">empty state</span></div>
+  <div class="firstrun">
+    <div class="eyebrow" style="position:relative">Strength ledger</div>
+    <h3>Open your ledger</h3>
+    <p>Your first session sets the baseline every future score is measured against. Two more and the portfolio, models and coach come alive.</p>
+    <span class="cta press">Start Day A · Push</span>
+  </div>
+  <p class="banner" style="margin-top:12px"><b>Why this matters:</b> today a brand-new user lands on a page of empty widgets — a heatmap of 3 blank cells, 7 muscle rows at 0, targets on baseline numbers, a radar pinned to the 35 floor. That reads as broken, not new. Replace it with one confident invitation until there's data to earn the dashboards.</p>
+
+  <div class="sec"><h2>Motion &amp; colour semantics</h2><span class="n">restraint</span></div>
+  <div class="grid g2">
+    <div class="card" style="text-align:center">
+      <div class="b4a">OVR counts up on entry</div>
+      <div class="ovr" id="ovr">0</div>
+      <svg class="radar" width="150" height="140" viewBox="0 0 170 160" style="margin-top:6px">
+        <polygon points="85,20 135,55 120,120 50,120 35,55" fill="none" stroke="var(--gridline)"/>
+        <polygon class="cur" points="85,45 118,62 104,104 62,110 52,64"/>
+        <text x="85" y="14" text-anchor="middle">PUSH</text>
+      </svg>
+      <div class="note">Radar grows in; numbers roll. One orchestrated load moment, not scattered effects.</div>
+    </div>
+    <div class="card">
+      <div class="b4a">Rating &amp; return colours</div>
+      <div class="chips">
+        <span class="chip" style="color:var(--pos)">BUY</span>
+        <span class="chip" style="color:var(--warn)">HOLD</span>
+        <span class="chip" style="color:var(--info)">SWAP</span>
+        <span class="chip" style="color:var(--neg)">REDUCE</span>
+      </div>
+      <div class="chips" style="margin-top:12px">
+        <span class="chip g" style="border-color:var(--pos)">+2.9%/wk</span>
+        <span class="chip r" style="border-color:var(--neg)">−6.5% draw</span>
+      </div>
+      <div class="note">Green = progress, red = regression, amber = hold, blue = act. Fixed meaning everywhere — no colour doing two jobs.</div>
+      <div class="b4a" style="margin-top:14px">Press feedback</div>
+      <div class="chips"><span class="cta press" style="margin:0">Tap me</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Build order</h2><span class="n">if you greenlight</span></div>
+  <div class="card">
+    <p class="note" style="margin:0">1 · Icon system + tokenised colour (biggest lift, touches every screen) → 2 · First-run &amp; empty states → 3 · Shared elevated chart component → 4 · Position-card grid + rest ring → 5 · Load-in motion (OVR roll, radar draw, view cross-fade), all behind <code>prefers-reduced-motion</code>. Each ships behind the harness; nothing regresses.</p>
+  </div>
+
+</div>
+<script>
+  // count-up demo (standalone reference only)
+  (function(){
+    if(matchMedia('(prefers-reduced-motion:reduce)').matches){document.getElementById('ovr').textContent='58';return;}
+    const el=document.getElementById('ovr');let n=0;const t=setInterval(()=>{n+=2;if(n>=58){n=58;clearInterval(t)}el.textContent=n;},22);
+  })();
+</script>
+</body>
+</html>
