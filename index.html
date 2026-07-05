@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0A0C10" />
   <meta name="description" content="Brunian Lifts — a personal strength ledger with scoring, cloud sync, exercise bank, program editing, weekly coaching, charts and PR history." />
+  <link rel="canonical" href="https://brunomartins7.github.io/lifts/" />
+  <meta property="og:url" content="https://brunomartins7.github.io/lifts/" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon-192.png" />
   <link rel="apple-touch-icon" href="icon-192.png" />
@@ -401,34 +403,66 @@
 
     /* ============ Desktop / laptop: sidebar + multi-column ============ */
     @media (min-width:1080px){
-      :root{--sbw:236px}
-      body:before{content:"";position:fixed;left:0;top:0;bottom:0;width:var(--sbw);background:linear-gradient(180deg,rgba(16,19,25,.96),rgba(11,13,18,.98));border-right:1px solid var(--line);z-index:40}
-      .shell{max-width:1200px;margin:0;padding:22px 40px 60px calc(var(--sbw) + 40px)}
-      .shell.has-finish{padding-bottom:130px}
+      :root{--sbw:264px;--desk-pad:clamp(28px,3vw,58px)}
+      body{
+        background:
+          linear-gradient(90deg,rgba(242,239,231,.025) 1px,transparent 1px),
+          linear-gradient(180deg,rgba(242,239,231,.018) 1px,transparent 1px),
+          radial-gradient(ellipse 56% 30% at 30% -8%,rgba(217,169,78,.12),transparent),
+          radial-gradient(ellipse 40% 24% at 100% 1%,rgba(125,164,255,.06),transparent),
+          linear-gradient(180deg,#0C0F14 0%,#08090D 100%);
+        background-size:48px 48px,48px 48px,auto,auto,auto;
+        background-attachment:fixed;
+      }
+      body:before{content:"";position:fixed;left:0;top:0;bottom:0;width:var(--sbw);background:linear-gradient(180deg,rgba(16,19,25,.98),rgba(9,11,15,.99));border-right:1px solid var(--line);box-shadow:18px 0 56px rgba(0,0,0,.22);z-index:40}
+      .shell{width:100%;max-width:none;margin:0;min-height:100vh;padding:28px var(--desk-pad) 72px calc(var(--sbw) + var(--desk-pad))}
+      .shell.has-finish{padding-bottom:132px}
       /* head → sidebar top */
-      .head{position:fixed;left:0;top:0;width:var(--sbw);margin:0;padding:22px 18px 14px;background:none;backdrop-filter:none;z-index:50}
-      .appbar{flex-direction:column;align-items:flex-start;gap:16px;padding:0}
+      .head{position:fixed;left:0;top:0;width:var(--sbw);margin:0;padding:26px 20px 14px;background:none;backdrop-filter:none;z-index:50}
+      .appbar{flex-direction:column;align-items:stretch;gap:18px;padding:0}
       .brand{align-items:center}
-      .ovr-mini{align-self:stretch;justify-content:space-between;padding:9px 14px}
+      .mark{width:46px;height:46px;border-radius:14px}
+      .mark svg{width:27px;height:27px}
+      .bt{font-size:22px}
+      .sync-chip{padding:5px 10px}
+      .ovr-mini{align-self:stretch;justify-content:space-between;padding:11px 14px;background:rgba(18,21,28,.72)}
+      .ovr-mini b{font-size:22px}
       /* nav → sidebar rail */
-      .nav{left:0;right:auto;top:150px;bottom:auto;width:var(--sbw);flex-direction:column;gap:3px;padding:10px 12px;border:0;background:none;backdrop-filter:none;z-index:50}
-      .nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:11px;padding:11px 13px;font-size:13px;font-weight:700;letter-spacing:.1px;border-radius:11px;min-height:44px;color:var(--muted)}
+      .nav{left:0;right:auto;top:170px;bottom:auto;width:var(--sbw);flex-direction:column;gap:5px;padding:10px 14px;border:0;background:none;backdrop-filter:none;z-index:50}
+      .nav button{flex:none;flex-direction:row;justify-content:flex-start;gap:12px;padding:12px 14px;font-size:13px;font-weight:700;letter-spacing:0;border-radius:11px;min-height:46px;color:var(--muted)}
+      .nav button svg{width:21px;height:21px}
       .nav button .nav-l{font-size:13px}
       .nav button.active{color:var(--gold2);background:var(--goldGhost);box-shadow:inset 2.5px 0 0 var(--gold)}
       .nav--session{display:flex}
       /* content grids */
-      .home-grid{display:grid;grid-template-columns:1.04fr .96fr;gap:0 20px;align-items:start}
-      .duo{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;align-items:start}
-      .groups-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px;align-items:start}
-      .tool-grid{grid-template-columns:repeat(3,1fr);gap:12px}
-      .grid3,.grid2{gap:12px}
-      .bank-grid{grid-template-columns:repeat(4,1fr);gap:12px}
+      .home-grid{display:grid;grid-template-columns:minmax(390px,.82fr) minmax(520px,1.18fr);gap:24px;align-items:start}
+      .hg-main{position:sticky;top:28px;align-self:start}
+      .hg-side{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+      .hg-side>.grid3,.hg-side>.card,.hg-side>.banner{margin-top:0}
+      .hg-side>.grid3{grid-column:1/-1}
+      .hg-side>.grid3 .metric{padding:16px 14px}
+      .hg-side>.card:nth-of-type(1){grid-column:1/-1}
+      .duo{display:grid;grid-template-columns:minmax(0,.95fr) minmax(360px,1.05fr);gap:18px;align-items:start}
+      .groups-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
+      .tool-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+      .rot-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+      .grid3,.grid2{gap:14px}
+      .bank-grid{grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}
       .formgrid{grid-template-columns:repeat(6,1fr)}
       .formgrid.full{grid-template-columns:1fr 1fr}
-      .title{font-size:36px}
-      .level{font-size:66px}
-      .hero{padding:26px 26px}
-      .card{padding:18px}
+      .title{font-size:38px}
+      .level{font-size:76px;letter-spacing:-1px}
+      .hero{padding:28px;border-radius:18px;background:linear-gradient(150deg,rgba(38,45,59,.62),rgba(17,20,27,.97));box-shadow:0 28px 76px rgba(0,0,0,.34),inset 0 1px 0 rgba(242,239,231,.05)}
+      .hero:before{right:-58px;top:-70px;width:220px;height:220px}
+      .card{padding:18px;border-radius:16px}
+      .section{margin:28px 2px 12px}
+      .day{min-height:104px;padding:16px}
+      .tool{min-height:132px;padding:17px}
+      .tool strong{font-size:14px}
+      .tool span{font-size:12px}
+      .metric{padding:15px 13px}
+      .num{font-size:25px}
+      .lab{letter-spacing:.7px}
       .report-grade{font-size:104px}
       /* fixed bars respect the sidebar */
       .finish-bar{left:var(--sbw)}
@@ -437,6 +471,13 @@
       .toast{left:calc(50% + var(--sbw)/2)}
       .notes{min-height:100px}
       .media img{max-height:250px}
+    }
+    @media (min-width:1500px){
+      :root{--sbw:276px}
+      .home-grid{grid-template-columns:minmax(430px,.78fr) minmax(720px,1.22fr);gap:28px}
+      .tool-grid{grid-template-columns:repeat(7,minmax(0,1fr))}
+      .bank-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
+      .groups-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
     }
     /* mid-size screens: breathe a little wider, keep phone layout */
     @media (min-width:700px) and (max-width:1079px){
