@@ -365,15 +365,18 @@ function normalizeDraft(session, st){
   const S = st || state;
   const day = S.program[session.dayIndex] || S.program[0];
   const draft={};
-  for (const ex of day.groups.flatMap(g=>g.exercises)){
+  const swaps=session.exerciseSwaps||{};
+  for (const base of day.groups.flatMap(g=>g.exercises)){
+    const ex=swaps[base.id]||base;
     draft[ex.id]=normalizeEntry(ex,(session.draft||{})[ex.id]||targetEntryIn(ex,S));
   }
   const setDone={...(session.setDone||{})};
-  for (const ex of day.groups.flatMap(g=>g.exercises)){
+  for (const base of day.groups.flatMap(g=>g.exercises)){
+    const ex=swaps[base.id]||base;
     const reps=draft[ex.id].reps||[];
     setDone[ex.id]=Array.from({length:reps.length},(_,i)=>Boolean(setDone[ex.id]?.[i]));
   }
-  return {...session,draft,setDone,note:session.note||'',startedAt:session.startedAt||now()};
+  return {...session,draft,setDone,exerciseSwaps:swaps,removedExercises:session.removedExercises||[],note:session.note||'',startedAt:session.startedAt||now()};
 }
 
 function sortedSessions(){return(state.sessions||[]).slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))}
@@ -395,6 +398,21 @@ function targetEntryIn(ex,S){
   return targetFromLast(ex,last);
 }
 function targetEntry(ex){return targetFromLast(ex, latestEntryFor(ex))}
+/* A new movement should not start from a generic number when the athlete has
+   history on the same muscle. Transfer the average progress between each
+   movement's start and goal, preferring matching equipment. */
+function hasExerciseHistory(ex){return sessionsForEx(ex).length>0}
+function muscleBasedTarget(ex){
+  if(hasExerciseHistory(ex))return targetEntry(ex);
+  if(ex.scoreMode==='reps')return baselineEntry(ex);
+  const peers=[...new Map([...allExercises(),...BANK].map(x=>[x.id,x])).values()].filter(p=>p.id!==ex.id&&p.muscle===ex.muscle&&hasExerciseHistory(p)&&p.scoreMode!=='reps');
+  if(!peers.length)return baselineEntry(ex);
+  const ranked=peers.map(p=>{const e=latestEntryFor(p),span=Math.max(Number(p.inc)||2.5,(Number(p.goalWeight)||0)-(Number(p.startWeight)||0));return{p,progress:clamp(((Number(e.weight)||0)-(Number(p.startWeight)||0))/span,0,1),match:p.equipment===ex.equipment?1:0}}).sort((a,b)=>b.match-a.match);
+  const use=ranked.slice(0,3),progress=use.reduce((s,x)=>s+x.progress*(x.match?1.5:1),0)/use.reduce((s,x)=>s+(x.match?1.5:1),0);
+  const inc=Number(ex.inc)||2.5,start=Number(ex.startWeight)||0,goal=Math.max(start,Number(ex.goalWeight)||start);
+  const weight=Math.round((start+(goal-start)*progress)/inc)*inc;
+  return{weight:Number(weight.toFixed(1)),reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.min)||8),estimatedFromMuscle:true};
+}
 function targetFromLast(ex,last){
   let weight=Number(last.weight)||0;
   const targetSets=Math.max(Number(ex.sets)||3,(last.reps||[]).length||0);
@@ -592,7 +610,7 @@ function latestSignificantChange(){const sessionTime=Math.max(0,...(state.sessio
 
 function achievements(){const p=computeProfile(),sum=trainingSummary(),ach=[];const add=(g,n,d,ok,need,pts)=>ach.push({g,n,d,ok,need,pts});const sessions=sum.total;[1,2,3,5,8,12,16,20,24,28,32,36,40,44,48].forEach((n,i)=>add('Consistency',`${n} Session${n===1?'':'s'}`,`Log ${n} completed workout${n===1?'':'s'}.`,sessions>=n,`${sessions}/${n}`,i<4?10:i<9?20:35));[1,3,6].forEach((r,i)=>{const count=Math.min(...state.program.map((d,di)=>state.sessions.filter(s=>s.dayIndex===di).length));add('Consistency',`${r} Full Rotation${r===1?'':'s'}`,`Complete every day of the cycle ${r} time${r===1?'':'s'}.`,count>=r,`${count}/${r}`,i===0?20:i===1?35:55)});const ws=weekStreak();[2,4,8,12].forEach((n,i)=>add('Consistency',`${n} Week Streak`,`Hold a streak of ${n} consecutive weeks with 3+ sessions.`,ws>=n,`${ws}/${n}`,i<2?25:50));[36,38,40,42,45,48,50,55,60,65,70,75].forEach(t=>add('Overall',`${t} OVR`,`Reach ${t} overall.`,p.overall>=t,`${p.overall}/${t}`,achievementPointsForThreshold(t)));radarAxes().forEach(a=>[40,45,50,55,60].forEach(t=>add('Muscle Profile',`${a.label} ${t}`,`Reach ${t} score for ${a.label.toLowerCase()}.`,(p[a.key]||0)>=t,`${p[a.key]||0}/${t}`,achievementPointsForThreshold(t))));allExercises().forEach(ex=>{const sc=scoreFromEntry(ex,latestEntryFor(ex));add('Exercise Scores',`${ex.name} 45`,`Reach 45 score on ${ex.name}.`,sc>=45,`${sc}/45`,20)});const prCount=sum.prs;[1,3,5,8,12,16,20,25,30,40].forEach((n,i)=>add('PRs',`${n} PR${n===1?'':'s'}`,`Record ${n} personal record${n===1?'':'s'}.`,prCount>=n,`${prCount}/${n}`,i<3?15:i<7?30:50));const week=weeklyWindow(),weeklyVol=totalVolumeForSessions(week),completeDays=new Set(week.map(s=>s.dayIndex)).size;[[2,'Two Session Week'],[3,'Three Session Week'],[4,'Four Session Week']].forEach(([n,label],i)=>add('Discipline',label,`Log ${n} sessions in the last 7 days.`,week.length>=n,`${week.length}/${n}`,15+i*10));add('Discipline','Balanced Week','Train all three days in the last 7 days.',completeDays>=3,`${completeDays}/3`,35);add('Discipline','Volume Base','Lift 3000KG total volume in the last 7 days.',weeklyVol>=3000,`${weeklyVol}/3000`,20);add('Discipline','Volume Push','Lift 5000KG total volume in the last 7 days.',weeklyVol>=5000,`${weeklyVol}/5000`,35);add('Discipline','Volume Surge','Lift 7500KG total volume in the last 7 days.',weeklyVol>=7500,`${weeklyVol}/7500`,55);add('Discipline','Clean Data','Back up after meaningful logged progress.',!hasMeaningfulUnsavedData()&&sessions>=2,hasMeaningfulUnsavedData()?'Backup Needed':'Saved',20);add('Discipline','Program Owner','Customize the editable program at least once.',Boolean(state.settings.programUpdatedAt),state.settings.programUpdatedAt?'Done':'Not Yet',20);add('Discipline','Two Device Sync','Set up cloud sync so phone and laptop share one ledger.',Boolean(state.settings.gistId&&state.settings.gistToken),state.settings.gistId?'Done':'Not Yet',25);return ach.slice(0,120)}
 
-function compareToPrevious(dayIndex,entries){const prev=previousSameDay(dayIndex);const day=planDay(dayIndex);const lines=[];let up=0,down=0,held=0,total=0;for(const ex of day.groups.flatMap(g=>g.exercises)){const nowE=entries[ex.id]||baselineEntry(ex);const prevE=prev?.entries?.[ex.id]||baselineEntry(ex);const strength=(entryEst(ex,nowE)-entryEst(ex,prevE))/Math.max(1,entryEst(ex,prevE));const vol=(volumeEntry(nowE)-volumeEntry(prevE))/Math.max(1,volumeEntry(prevE));const index=strength*.72+vol*.28;const dir=index>.015?'up':index<-.015?'down':'held';if(dir==='up')up++;else if(dir==='down')down++;else held++;total+=index;lines.push({id:ex.id,name:ex.name,strength,vol,index,dir})}const avg=total/Math.max(1,lines.length);let grade='C';if(!prev&&Math.abs(avg)<.012)grade='BASE';else if(avg>=.08)grade='S';else if(avg>=.045)grade='A';else if(avg>=.018)grade='B';else if(avg>=-.015)grade='C';else if(avg>=-.045)grade='D';else grade='F';return{prev,first:!prev,lines,up,down,held,avg,grade}}
+function compareToPrevious(dayIndex,entries){const prev=previousSameDay(dayIndex);const day=planDay(dayIndex);const active=state.session?sessionExercises(day):day.groups.flatMap(g=>g.exercises);const removed=(state.session?.removedExercises||[]).map(exById);const exercises=[...active,...removed];const lines=[];let up=0,down=0,held=0,total=0;for(const ex of exercises){const nowE=entries[ex.id]||baselineEntry(ex);const prevE=prev?.entries?.[ex.id]||baselineEntry(ex);const strength=(entryEst(ex,nowE)-entryEst(ex,prevE))/Math.max(1,entryEst(ex,prevE));const vol=(volumeEntry(nowE)-volumeEntry(prevE))/Math.max(1,volumeEntry(prevE));const index=strength*.72+vol*.28;const dir=index>.015?'up':index<-.015?'down':'held';if(dir==='up')up++;else if(dir==='down')down++;else held++;total+=index;lines.push({id:ex.id,name:ex.name,strength,vol,index,dir})}const avg=total/Math.max(1,lines.length);let grade='C';if(!prev&&Math.abs(avg)<.012)grade='BASE';else if(avg>=.08)grade='S';else if(avg>=.045)grade='A';else if(avg>=.018)grade='B';else if(avg>=-.015)grade='C';else if(avg>=-.045)grade='D';else grade='F';return{prev,first:!prev,lines,up,down,held,avg,grade}}
 function detectPRs(entries){const prs=[];for(const id in entries){const ex=exById(id);const before=bestEntryFor(ex).entry;const curr=entries[id];if(entryEst(ex,curr)>entryEst(ex,before)+.1)prs.push({id,name:ex.name,kind:'Estimated Max',old:Math.round(entryEst(ex,before)*10)/10,now:Math.round(entryEst(ex,curr)*10)/10});if(volumeEntry(curr)>volumeEntry(before)+.1&&ex.scoreMode!=='reps')prs.push({id,name:ex.name,kind:'Volume',old:Math.round(volumeEntry(before)),now:Math.round(volumeEntry(curr))})}return prs}
 function fatigueWarnings(entries){const out=[];for(const id in entries){const ex=exById(id),r=entries[id].reps||[];if(r.length>=2&&r[0]>0){const drop=(r[0]-r[r.length-1])/r[0];if(drop>=.30)out.push(`${ex.name} dropped from ${r[0]} reps to ${r[r.length-1]}. Rest longer, lower the load slightly, or stop one rep earlier on set one.`)}}return out}
 function gradeIndex(g){return ['F','D','C','B','A','S'].indexOf(g)}
@@ -713,6 +731,7 @@ let state = loadState();
 let view = state.session ? 'workout' : 'home';
 let openDay = state.session ? state.session.dayIndex : state.currentDayIndex;
 let toast='', toastTimer=null, confirmBox=null, editingSessionId=null, selectedExId=null;
+let calendarOffset=0;
 let bankTarget=null;        // {dayIndex, groupId, replaceId|null}
 let bankFilter={muscle:'',equipment:'',q:''};
 let historyQuery='';
@@ -721,7 +740,9 @@ function flash(msg){toast=msg;clearTimeout(toastTimer);toastTimer=setTimeout(()=
 function jumpTop(){try{window.scrollTo(0,0)}catch(_){}}
 function go(v){view=v;jumpTop();render()}
 
-function buildDraft(dayIndex){const day=planDay(dayIndex);const draft={};const done={};const deload=inDeload();for(const ex of day.groups.flatMap(g=>g.exercises)){const t=targetEntry(ex);draft[ex.id]=deload?deloadEntry(ex,t):t;done[ex.id]=Array.from({length:Number(ex.sets)||3},()=>false)}return{dayIndex,draft,setDone:done,startedAt:now(),note:''}}
+function buildDraft(dayIndex){const day=planDay(dayIndex);const draft={};const done={};const deload=inDeload();for(const ex of day.groups.flatMap(g=>g.exercises)){const t=targetEntry(ex);draft[ex.id]=deload?deloadEntry(ex,t):t;done[ex.id]=Array.from({length:Number(ex.sets)||3},()=>false)}return{dayIndex,draft,setDone:done,startedAt:now(),note:'',exerciseSwaps:{},removedExercises:[]}}
+function sessionExercise(ex){return state.session?.exerciseSwaps?.[ex.id]||ex}
+function sessionExercises(day=planDay(state.session?.dayIndex||0)){return day.groups.flatMap(g=>g.exercises.map(sessionExercise)).filter(ex=>!state.session?.removedExercises?.includes(ex.id))}
 function cycleRPE(exId,index){
   const d=draftFor(exId); if(!d)return;
   d.rpe=Array.isArray(d.rpe)?d.rpe:(d.reps||[]).map(()=>0);
@@ -781,7 +802,7 @@ function addWarmup(exId){
 function removeWarmup(exId){if(!state.session)return;const d=state.session.draft[exId];if(!d||!Array.isArray(d.warmups)||!d.warmups.length){flash('No warmup set to remove.');return}d.warmups.pop();save();render()}
 function fillFromLast(exId){const d=draftFor(exId);if(!d)return;const ex=exById(exId);const last=latestEntryFor(ex);d.weight=Number(last.weight)||0;d.reps=(last.reps||[]).slice(0,6).map(Number);state.session.setDone[exId]=d.reps.map(()=>false);save();render();flash('Filled with your last logged numbers.')}
 function fillFromTarget(exId){const d=draftFor(exId);if(!d)return;const ex=exById(exId);const t=targetEntry(ex);d.weight=t.weight;d.reps=t.reps.slice();state.session.setDone[exId]=d.reps.map(()=>false);save();render();flash('Filled with today\'s target.')}
-function completion(){if(!state.session)return{done:0,total:0,pct:0};let done=0,total=0;for(const id in state.session.setDone){for(const v of state.session.setDone[id]){total++;if(v)done++}}for(const id in state.session.draft){for(const w of (state.session.draft[id].warmups||[])){total++;if(w.done)done++}}return{done,total,pct:total?Math.round(done/total*100):0}}
+function completion(){if(!state.session)return{done:0,total:0,pct:0};let done=0,total=0;for(const id in state.session.setDone){for(const v of state.session.setDone[id]){total++;if(v)done++}}for(const id in state.session.draft){for(const w of (state.session.draft[id].warmups||[])){total++;if(w.done)done++}}for(const id of (state.session.removedExercises||[])){const ex=exById(id);total+=Number(ex.sets)||3}return{done,total,pct:total?Math.round(done/total*100):0}}
 
 function finishSession(force=false){
   if(!state.session)return;
@@ -789,7 +810,7 @@ function finishSession(force=false){
   if(c.done<c.total&&!force){confirmBox={title:'Finish with unlogged sets?',text:`${c.total-c.done} set${c.total-c.done===1?'':'s'} are not marked complete. Finish only if this is accurate.`,ok:'Finish anyway',danger:false,onYes:()=>finishSession(true)};render();return}
   const day=planDay(state.session.dayIndex);
   const entries={};
-  for(const ex of day.groups.flatMap(g=>g.exercises))entries[ex.id]=normalizeEntry(ex,state.session.draft[ex.id]);
+  for(const ex of sessionExercises(day))entries[ex.id]=normalizeEntry(ex,state.session.draft[ex.id]);
   const comp=compareToPrevious(state.session.dayIndex,entries);
   const prs=detectPRs(entries);
   comp.rawGrade=comp.grade;comp.grade=adjustGradeForSession(comp.grade,c.pct,entries);
@@ -855,6 +876,14 @@ function resetProgram(){confirmBox={title:'Reset program?',text:'This restores t
 
 /* Exercise bank: swap / add / remove. */
 function openBank(dayIndex,groupId,replaceId){bankTarget={dayIndex,groupId,replaceId:replaceId||null};const cur=replaceId?exById(replaceId):null;bankFilter={muscle:cur?cur.muscle:'',equipment:'',q:''};view='bank';jumpTop();render()}
+function openSessionSwap(groupId,baseId){const base=planDay(state.session.dayIndex).groups.find(g=>g.id===groupId)?.exercises.find(x=>x.id===baseId);if(!base)return;bankTarget={dayIndex:state.session.dayIndex,groupId,replaceId:baseId,sessionOnly:true};bankFilter={muscle:base.muscle,equipment:'',q:''};view='bank';jumpTop();render()}
+function removeSessionExercise(exId){
+  if(!state.session)return;
+  if((state.session.removedExercises||[]).length>=1){flash('You can remove at most one exercise per workout.');return}
+  const ex=exById(exId);
+  confirmBox={title:`Remove ${ex.name} from this workout?`,text:'You can remove one exercise per session. Its planned sets stay incomplete, so your completion percentage and session grade will fall.',ok:'Remove for today',danger:false,onYes:()=>{state.session.removedExercises=[exId];save();confirmBox=null;render();flash(`${ex.name} removed for today — grade impact applied.`)}};
+  render();
+}
 function bankResults(){
   return BANK.filter(b=>{
     if(bankFilter.muscle&&b.muscle!==bankFilter.muscle)return false;
@@ -866,6 +895,17 @@ function bankResults(){
 function chooseFromBank(bankId){
   if(!bankTarget)return;
   const b=BANK.find(x=>x.id===bankId);if(!b)return;
+  if(bankTarget.sessionOnly){
+    const base=planDay(state.session.dayIndex).groups.find(g=>g.id===bankTarget.groupId)?.exercises.find(x=>x.id===bankTarget.replaceId);if(!base)return;
+    if(sessionExercises().some(x=>x.id===b.id)){flash('That exercise is already in this workout.');return}
+    const fresh={...b,sets:base.sets||3,startReps:b.min,goalReps:b.max,cues:b.cues||[]};
+    const suggestion=muscleBasedTarget(fresh);state.exerciseIndex[fresh.id]={...fresh};
+    delete state.session.draft[base.id];delete state.session.setDone[base.id];
+    state.session.exerciseSwaps=state.session.exerciseSwaps||{};state.session.exerciseSwaps[base.id]=fresh;
+    state.session.draft[fresh.id]=suggestion;state.session.setDone[fresh.id]=suggestion.reps.map(()=>false);
+    save();bankTarget=null;view='workout';jumpTop();render();
+    flash(suggestion.estimatedFromMuscle?`${fresh.name} ready — load estimated from your ${MUSCLE_LABEL[fresh.muscle].toLowerCase()} training.`:`${fresh.name} ready with your own history.`);return;
+  }
   const day=state.program[bankTarget.dayIndex];const group=day?.groups.find(g=>g.id===bankTarget.groupId);if(!group)return;
   const inPlan=allExercises().some(x=>x.id===b.id);
   if(inPlan&&(!bankTarget.replaceId||bankTarget.replaceId!==b.id)){flash('That exercise is already in the program.');return}
@@ -962,11 +1002,14 @@ function renderBarbell(pct){
 }
 
 function renderHeatmap(){
-  const set={};sortedSessions().forEach(s=>set[s.date]=(set[s.date]||0)+1);
-  const weeks=8;let cells='';
-  const start=new Date();start.setDate(start.getDate()-(weeks*7-1)-((new Date().getDay()+6)%7));
-  for(let r=0;r<7;r++){let row='';for(let c=0;c<weeks+1;c++){const d=new Date(start);d.setDate(start.getDate()+c*7+r);if(d>new Date()){row+='<span class="hm empty"></span>';continue}const k=localDateKey(d);const n=set[k]||0;row+=`<span class="hm l${Math.min(n,2)} ${k===today()?'today':''}" title="${k}${n?` · ${n} session${n>1?'s':''}`:''}"></span>`}cells+=`<div class="hm-row">${row}</div>`}
-  return `<div class="card"><div class="row" style="padding-top:0"><div><strong>Training map</strong><div class="small faint">Last ${weeks} weeks · week streak counts weeks with 3+ sessions</div></div><div class="pill">${weekStreak()}w streak</div></div><div class="heatmap">${cells}</div></div>`;
+  const counts={};sortedSessions().forEach(s=>counts[s.date]=(counts[s.date]||0)+1);
+  const month=new Date();month.setDate(1);month.setHours(0,0,0,0);month.setMonth(month.getMonth()+calendarOffset);
+  const year=month.getFullYear(),monthIndex=month.getMonth(),days=new Date(year,monthIndex+1,0).getDate(),lead=(month.getDay()+6)%7;
+  const cells=[];for(let i=0;i<lead;i++)cells.push('<span class="cal-day outside" aria-hidden="true"></span>');
+  for(let n=1;n<=days;n++){const d=new Date(year,monthIndex,n),k=localDateKey(d),sessions=counts[k]||0,isFuture=d>new Date();cells.push(`<span class="cal-day ${sessions?'trained':''} ${sessions>1?'double':''} ${k===today()?'today':''} ${isFuture?'future':''}" title="${k}${sessions?` · ${sessions} session${sessions>1?'s':''}`:' · Rest day'}"><b>${n}</b>${sessions?`<i>${sessions>1?sessions:'✓'}</i>`:''}</span>`)}
+  while(cells.length%7)cells.push('<span class="cal-day outside" aria-hidden="true"></span>');
+  const label=month.toLocaleDateString('en-GB',{month:'long',year:'numeric'});
+  return `<div class="card calendar-card"><div class="row calendar-title" style="padding-top:0"><div><strong>Training calendar</strong><div class="small faint">Completed workout dates · ${weekStreak()} week streak</div></div><div class="calendar-nav"><button class="cal-nav" data-action="calendar-prev" aria-label="Previous month">‹</button><span>${esc(label)}</span><button class="cal-nav" data-action="calendar-next" aria-label="Next month" ${calendarOffset>=0?'disabled':''}>›</button></div></div><div class="calendar-weekdays">${['M','T','W','T','F','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="training-calendar">${cells.join('')}</div><div class="calendar-key small faint"><span><i class="key-dot trained"></i>Trained</span><button data-action="calendar-current" ${calendarOffset===0?'disabled':''}>Current month</button></div></div>`;
 }
 
 function renderMuscleVolume(){
@@ -1057,6 +1100,7 @@ function renderWorkout(){
   <div class="level-head" style="margin-top:8px"><div><div class="eyebrow">In session · <span id="sess-clock">${Math.floor((Date.now()-(state.session?.startedAt||Date.now()))/60000)} min</span></div><div class="title">Day ${day.id} <em>${esc(day.name)}</em></div></div><div class="pill">${c.done}/${c.total}</div></div>
   <div class="switcher">${state.program.map((d,i)=>`<button class="switch ${i===openDay?'active':''}" data-action="switch-day" data-day="${i}">${d.id}</button>`).join('')}</div>
   ${inDeload()?'<div class="banner warn"><strong>Deload week</strong><div>Loads are prefilled 10% lighter at floor reps. Keep every rep crisp and leave fresh — the block restarts next week.</div></div>':''}
+  ${(state.session?.removedExercises||[]).length?'<div class="banner warn"><strong>Exercise removed for today</strong><div>Its planned sets remain incomplete and will reduce this session’s completion grade.</div></div>':''}
   ${prevNote?`<div class="card flat note-echo"><span class="eyebrow">Last time you wrote</span><div class="small muted" style="margin-top:5px">${esc(prevNote)}</div></div>`:''}
   <div class="prog">${renderBarbell(c.pct)}<div class="mono small muted" style="text-align:right">${c.pct}%</div></div>
   <div class="groups-grid">${day.groups.map(g=>renderGroup(g,openDay)).join('')}</div>
@@ -1065,17 +1109,17 @@ function renderWorkout(){
   ${renderRestBar()}
   <div class="finish-bar"><div class="finish-inner"><button class="finish" data-action="finish">Finish session</button></div></div></div>`;
 }
-function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div><button class="round-btn" data-action="round">Round done</button></div>${g.exercises.map(ex=>renderExercise(ex,dayIndex,g.id)).join('')}</section>`}
+function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div><button class="round-btn" data-action="round">Round done</button></div>${g.exercises.map(base=>({base,ex:sessionExercise(base)})).filter(x=>!state.session?.removedExercises?.includes(x.ex.id)).map(x=>renderExercise(x.ex,dayIndex,g.id,x.base.id)).join('')}</section>`}
 function renderMedia(ex){return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
-function renderExercise(ex,dayIndex,groupId){
+function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   const d=state.session?.draft?.[ex.id]||targetEntry(ex),done=state.session?.setDone?.[ex.id]||[],last=latestEntryFor(ex),target=targetEntry(ex),score=scoreFromEntry(ex,last),earned=(d.reps||[]).every(r=>r>=ex.max),weakR=Math.min(...(d.reps||[ex.min])),fill=clamp((weakR-ex.min)/Math.max(1,ex.max-ex.min),0,1),warmups=Array.isArray(d.warmups)?d.warmups:[];
   const plates=ex.equipment==='barbell'&&Number(d.weight)>Number(state.settings.barWeight||20)?plateFor(d.weight):null;
   return `<article class="exercise" id="ex-${esc(ex.id)}">
-  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">Last: ${esc(fmtEntry(last))} · Target: ${esc(fmtEntry(target))}</div></div><button class="tag" data-action="exercise" data-ex="${ex.id}">Score ${score}</button></div>
+  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}Last: ${esc(fmtEntry(last))} · Target: ${esc(fmtEntry(target))}</div></div><button class="tag" data-action="exercise" data-ex="${ex.id}">Score ${score}</button></div>
   ${renderMedia(ex)}
   <div class="range"><div class="bar"><div class="fill ${earned?'earned':''}" style="width:${fill*100}%"></div></div><div class="bar-labs"><span>${ex.min} reps</span><span>${earned&&ex.scoreMode!=='reps'?'Next load +'+ex.inc+'KG':'Top '+ex.max}</span></div></div>
   <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div></div>
-  <div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">+ Warmup</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">+ Set</button><button class="mini-btn danger" data-action="remove-set" data-ex="${ex.id}">− Set</button>${warmups.length?`<button class="mini-btn danger" data-action="remove-warmup" data-ex="${ex.id}">− Warmup</button>`:''}</div>
+  <div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn gold" data-action="session-swap" data-group="${groupId}" data-base="${baseId}">Swap similar</button><button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">+ Warmup</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">+ Set</button><button class="mini-btn danger" data-action="remove-set" data-ex="${ex.id}">− Set</button>${warmups.length?`<button class="mini-btn danger" data-action="remove-warmup" data-ex="${ex.id}">− Warmup</button>`:''}</div>
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,last.reps?.[i]??last.reps?.[0]??ex.min,Boolean(done[i]))).join('')}</div>
@@ -1117,12 +1161,13 @@ function renderProgram(){return`<div class="shell"><div id="toast-slot">${render
 function renderBank(){
   const res=bankResults();
   const target=bankTarget?exById(bankTarget.replaceId||''):null;
-  return `<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('home')}<button class="back" data-action="program">‹ Program</button>
-  <section class="hero"><div class="eyebrow">Exercise bank</div><div class="title">${bankTarget?.replaceId?`Swap ${esc(target?.name||'')}`:'Add exercise'}</div><div class="sub">${BANK.length} movements with verified demo clips, filtered by muscle and equipment.</div></section>
+  const sessionMode=Boolean(bankTarget?.sessionOnly);
+  return `<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('home')}<button class="back" data-action="${sessionMode?'workout':'program'}">‹ ${sessionMode?'Workout':'Program'}</button>
+  <section class="hero"><div class="eyebrow">${sessionMode?'In-session substitution':'Exercise bank'}</div><div class="title">${bankTarget?.replaceId?`Swap ${esc(target?.name||'')}`:'Add exercise'}</div><div class="sub">${sessionMode?'Showing movements for the same primary muscle. This changes today only; your program stays intact.':BANK.length+' movements with verified demo clips, filtered by muscle and equipment.'}</div></section>
   <input class="search" type="search" placeholder="Search movements" value="${esc(bankFilter.q)}" data-search="bank">
   <div class="chips">${['',...MUSCLES].map(m=>`<button class="chip ${bankFilter.muscle===m?'on':''}" data-bank-muscle="${m}">${m?MUSCLE_LABEL[m]:'All muscles'}</button>`).join('')}</div>
   <div class="chips">${['',...EQUIPMENT].map(e=>`<button class="chip ${bankFilter.equipment===e?'on':''}" data-bank-equip="${e}">${e?e[0].toUpperCase()+e.slice(1):'All equipment'}</button>`).join('')}</div>
-  <div class="bank-grid">${res.slice(0,60).map(b=>{const inPlan=allExercises().some(x=>x.id===b.id);const hist=sessionsForEx({id:b.id}).length;return`<button class="bank-card ${inPlan?'in-plan':''}" data-action="bank-pick" data-bank="${b.id}" ${inPlan?'disabled':''}><span class="bank-media"><img src="${CLIP_BASE+esc(b.clip)}" alt="" loading="lazy" onerror="this.style.display='none'"></span><span class="bank-name">${esc(b.name)}</span><span class="bank-meta">${esc(MUSCLE_LABEL[b.muscle])} · ${esc(b.equipment)}${b.scoreMode==='reps'?' · reps':''}${hist?` · ${hist} logged`:''}${inPlan?' · in program':''}</span></button>`}).join('')||'<div class="small faint">No movements match those filters.</div>'}</div>
+  <div class="bank-grid">${res.slice(0,60).map(b=>{const unavailable=sessionMode?sessionExercises().some(x=>x.id===b.id):allExercises().some(x=>x.id===b.id);const hist=sessionsForEx({id:b.id}).length;const estimate=!hist?muscleBasedTarget({...b,sets:target?.sets||3,startReps:b.min,goalReps:b.max}):null;return`<button class="bank-card ${unavailable?'in-plan':''}" data-action="bank-pick" data-bank="${b.id}" ${unavailable?'disabled':''}><span class="bank-media"><img src="${CLIP_BASE+esc(b.clip)}" alt="" loading="lazy" onerror="this.style.display='none'"></span><span class="bank-name">${esc(b.name)}</span><span class="bank-meta">${esc(MUSCLE_LABEL[b.muscle])} · ${esc(b.equipment)}${b.scoreMode==='reps'?' · reps':''}${hist?` · ${hist} logged`:estimate?.estimatedFromMuscle?` · est. ${fmtKg(estimate.weight)}`:''}${unavailable?' · already active':''}</span></button>`}).join('')||'<div class="small faint">No movements match those filters.</div>'}</div>
   ${res.length>60?`<div class="small faint" style="margin-top:10px">Showing 60 of ${res.length} — narrow the filters.</div>`:''}</div>`;
 }
 
@@ -1234,8 +1279,10 @@ let crashed=false;
 function renderCrash(err){return`<div class="shell"><div class="card banner bad" style="margin-top:40px"><strong>Something broke — your data is safe</strong><div class="small muted" style="margin:8px 0">${esc(String(err))}</div><div class="session-actions"><button class="secondary gold" data-action="crash-export">Download raw data</button><button class="secondary" data-action="crash-reload">Reload app</button></div></div></div>`}
 function render(){
   try{
+    const keepPosition=view==='workout';const scrollY=keepPosition?window.scrollY:0;
     const pages={home:renderHome,summary:renderSummary,weekly:renderWeekly,workout:renderWorkout,achievements:renderAchievements,history:renderHistory,editSession:renderEditSession,program:renderProgram,bank:renderBank,data:renderData,exercise:renderExerciseDetail,report:renderReport,prs:renderPRs,portfolio:renderPortfolio,analyst:renderAnalyst};
     app.innerHTML=(pages[view]||renderHome)()+renderConfirm();
+    if(keepPosition&&scrollY)requestAnimationFrame(()=>window.scrollTo(0,scrollY));
     crashed=false;
     if(view==='workout'){holdWake(true);if(!sessionClock)sessionClock=setInterval(tickSessionClock,15000)}
     else{holdWake(false);if(sessionClock){clearInterval(sessionClock);sessionClock=null}}
@@ -1251,7 +1298,7 @@ app.addEventListener('click',e=>{
   if(t.dataset.bankMuscle!==undefined){bankFilter.muscle=t.dataset.bankMuscle;render();return}
   if(t.dataset.bankEquip!==undefined){bankFilter.equipment=t.dataset.bankEquip;render();return}
   const a=t.dataset.action;
-  const nav={home:'home',summary:'summary',weekly:'weekly',history:'history',achievements:'achievements',program:'program',data:'data',prs:'prs',portfolio:'portfolio',analyst:'analyst'};
+  const nav={home:'home',summary:'summary',weekly:'weekly',history:'history',achievements:'achievements',program:'program',data:'data',prs:'prs',portfolio:'portfolio',analyst:'analyst',workout:'workout'};
   if(nav[a]){go(nav[a]);return}
   if(a==='exercise'){selectedExId=t.dataset.ex;go('exercise')}
   else if(a==='start')startSession(Number(t.dataset.day||state.currentDayIndex));
@@ -1267,6 +1314,11 @@ app.addEventListener('click',e=>{
   else if(a==='remove-set')removeWorkSet(t.dataset.ex);
   else if(a==='add-warmup')addWarmup(t.dataset.ex);
   else if(a==='remove-warmup')removeWarmup(t.dataset.ex);
+  else if(a==='session-swap')openSessionSwap(t.dataset.group,t.dataset.base);
+  else if(a==='session-remove')removeSessionExercise(t.dataset.ex);
+  else if(a==='calendar-prev'){calendarOffset--;render()}
+  else if(a==='calendar-next'){calendarOffset=Math.min(0,calendarOffset+1);render()}
+  else if(a==='calendar-current'){calendarOffset=0;render()}
   else if(a==='fill-last')fillFromLast(t.dataset.ex);
   else if(a==='fill-target')fillFromTarget(t.dataset.ex);
   else if(a==='round')startRest(state.settings.restSec||60);
