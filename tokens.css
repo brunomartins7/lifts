@@ -1,0 +1,85 @@
+/* ============================================================================
+   BRUNIAN LIFTS — design tokens. THE single source of truth.
+   Linked by index.html (the app) and design-language.html (the spec page), so
+   the two can no longer drift apart. Nothing else in the codebase may declare
+   a raw colour: if a value is needed twice, it belongs here.
+
+   Data-colour rule, applied everywhere:
+     GOLD  = magnitude. Brighter gold means a bigger number. The only chroma
+             a chart or a score is allowed to use.
+     GREEN = nothing to act on. A set logged, a load in range, a synced ledger.
+             Never used to encode a quantity.
+     RED   = risk. Regression, injury-risk load, destructive controls.
+   Anything else — blue especially — is not part of this system.
+   ========================================================================== */
+:root{
+  /* ---- ink ladder: surfaces from deepest background to raised panel ---- */
+  --bg:#0B0D12;
+  --bg-top:#0D1016;                 /* body gradient, top */
+  --bg-bot:#08090D;                 /* body gradient, bottom */
+  --bg2:#0F1218;
+  --panel:#14171F;
+  --panel2:#1B1F29;
+  --panel3:#232936;
+  --line:#272E3B;
+  --line2:#323A4A;
+  --soft:rgba(242,239,231,.07);
+  --gridline:rgba(242,239,231,.10);
+  --gridline2:rgba(242,239,231,.05);
+
+  /* ---- type colours: high contrast down to quiet ---- */
+  --ink:#F2EFE7;
+  --ink2:#C9C3B4;
+  --muted:#98A0AE;
+  --faint:#69707E;
+
+  /* ---- gold: the accent, and the only data chroma ---- */
+  --gold:#D9A94E;
+  --gold2:#F0C46F;                  /* brightest — peaks and highlights */
+  --goldDim:#57431F;                /* borders on gold-ghost surfaces */
+  --goldGhost:rgba(217,169,78,.12);
+  --gold-ink:#1A1206;               /* type on a solid gold fill */
+
+  /* ---- semantics: green and red mean one thing each ---- */
+  --ok:#7FCF9B;                     /* nothing to act on: logged, in range, synced */
+  --okDim:rgba(127,207,155,.14);
+  --risk:#E08585;                   /* regression, over-reach, destructive control */
+  --riskDim:rgba(224,133,133,.12);
+  --risk-ink:#2A0E0E;               /* type on a solid red fill */
+
+  /* ---- steel: the loading-barbell signature, the one non-gold material ---- */
+  --steel:#8B94A5;
+  --steel2:#525A69;
+
+  /* ---- magnitude ramp: score → colour. Monotonic gold, red as the floor.
+         Read top to bottom as strength descending. ---- */
+  --m5:#F0C46F;                     /* 90+  goal range */
+  --m4:#D9A94E;                     /* 75+  advanced */
+  --m3:#B08F4A;                     /* 60+  intermediate */
+  --m2:#8A7A62;                     /* 45+  developing */
+  --m1:#69707E;                     /* 30+  beginner */
+  --m0:#E08585;                     /* <30  foundation needed — deliberate break */
+
+  /* ---- data series: gold leads, ink follows, nothing else ---- */
+  --series:#D9A94E;                 /* primary series */
+  --series2:#C9C3B4;                /* comparison series (best, fitted trend) */
+  --seriesGhost:rgba(217,169,78,.10);
+
+  /* ---- media: exercise demos arrive as white-background GIFs ---- */
+  --media-bg:#0F1218;               /* demos are inverted and screen-blended
+                                       onto this, so the white plate they ship
+                                       with never appears */
+
+  /* ---- type ---- */
+  --disp:"Fraunces",Georgia,serif;
+  --body:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* ---- geometry & motion ---- */
+  --r-lg:20px;
+  --r-md:14px;
+  --r-sm:10px;
+  --e:cubic-bezier(.2,.7,.2,1);
+  --navh:62px;
+  --shadow:rgba(0,0,0,.5);
+}

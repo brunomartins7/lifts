@@ -9,8 +9,8 @@
      "replace the file in the repo, same URL" update workflow still works;
      cache is only used as the offline fallback.
    ========================================================================== */
-const CACHE = 'brunian-lifts-shell-v6';
-const SHELL = ['./', './index.html', './app.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'brunian-lifts-shell-v7';
+const SHELL = ['./', './index.html', './app.js', './tokens.css', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil((async () => {

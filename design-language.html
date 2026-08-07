@@ -7,18 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,600&family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
 <style>
-:root{
-  --bg:#0B0D12;--bg2:#0F1218;--panel:#14171F;--panel2:#1B1F29;--panel3:#232936;
-  --line:#272E3B;--soft:rgba(242,239,231,.07);--gridline:rgba(242,239,231,.10);
-  --ink:#F2EFE7;--ink2:#C9C3B4;--muted:#98A0AE;--faint:#69707E;
-  --gold:#D9A94E;--gold2:#F0C46F;--goldDim:#57431F;--goldGhost:rgba(217,169,78,.12);
-  /* PROPOSED: semantic tokens so colour meaning lives in one place, not 130 inline styles */
-  --pos:#7FCF9B;--neg:#E08585;--warn:#F0C46F;--info:#7DA4FF;
-  --disp:"Fraunces",Georgia,serif;--body:"Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;
-  --r-lg:22px;--r-md:15px;--r-sm:11px;
-  --e:cubic-bezier(.2,.7,.2,1);
-}
+/* Tokens come from tokens.css — the same file the app loads. This page can no
+   longer describe a palette the app does not actually use. */
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;-webkit-font-smoothing:antialiased}
 body{background:radial-gradient(ellipse 60% 34% at 22% -6%,rgba(217,169,78,.13),transparent),radial-gradient(ellipse 42% 26% at 100% 4%,rgba(125,164,255,.06),transparent),linear-gradient(180deg,#0D1016,#090B0F)}
@@ -99,7 +91,7 @@ h1 em{font-style:italic;color:var(--gold2)}
 
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .chip{border:1px solid currentColor;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;letter-spacing:.4px}
-.mono{font-family:var(--mono)} .g{color:var(--pos)} .r{color:var(--neg)}
+.mono{font-family:var(--mono)} .g{color:var(--ok)} .r{color:var(--risk)}
 .press{transition:transform .12s var(--e)} .press:active{transform:scale(.96)}
 .banner{border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:var(--r-md);background:var(--panel);padding:13px 15px;font-size:12.5px;line-height:1.5;color:var(--ink2)}
 </style>
@@ -178,7 +170,7 @@ h1 em{font-style:italic;color:var(--gold2)}
   <div class="sec"><h2>Position card</h2><span class="n">fixes stat wrap</span></div>
   <div class="grid g2">
     <div class="pos press">
-      <div class="pos-h"><div class="pos-name">Barbell Bench Press</div><div class="rating" style="color:var(--pos)">BUY</div></div>
+      <div class="pos-h"><div class="pos-name">Barbell Bench Press</div><div class="rating" style="color:var(--ok)">BUY</div></div>
       <div class="stats">
         <div class="stat"><div class="v">96.0</div><div class="k">e1RM</div></div>
         <div class="stat"><div class="v g">+2.9%</div><div class="k">ret/wk</div></div>
@@ -187,7 +179,7 @@ h1 em{font-style:italic;color:var(--gold2)}
       </div>
     </div>
     <div class="pos press">
-      <div class="pos-h"><div class="pos-name">Standing Overhead Press</div><div class="rating" style="color:var(--info)">SWAP</div></div>
+      <div class="pos-h"><div class="pos-name">Standing Overhead Press</div><div class="rating" style="color:var(--series2)">SWAP</div></div>
       <div class="stats">
         <div class="stat"><div class="v">54.0</div><div class="k">e1RM</div></div>
         <div class="stat"><div class="v r">−0.4%</div><div class="k">ret/wk</div></div>
@@ -229,14 +221,14 @@ h1 em{font-style:italic;color:var(--gold2)}
     <div class="card">
       <div class="b4a">Rating &amp; return colours</div>
       <div class="chips">
-        <span class="chip" style="color:var(--pos)">BUY</span>
-        <span class="chip" style="color:var(--warn)">HOLD</span>
-        <span class="chip" style="color:var(--info)">SWAP</span>
-        <span class="chip" style="color:var(--neg)">REDUCE</span>
+        <span class="chip" style="color:var(--ok)">BUY</span>
+        <span class="chip" style="color:var(--gold2)">HOLD</span>
+        <span class="chip" style="color:var(--series2)">SWAP</span>
+        <span class="chip" style="color:var(--risk)">REDUCE</span>
       </div>
       <div class="chips" style="margin-top:12px">
-        <span class="chip g" style="border-color:var(--pos)">+2.9%/wk</span>
-        <span class="chip r" style="border-color:var(--neg)">−6.5% draw</span>
+        <span class="chip g" style="border-color:var(--ok)">+2.9%/wk</span>
+        <span class="chip r" style="border-color:var(--risk)">−6.5% draw</span>
       </div>
       <div class="note">Green = progress, red = regression, amber = hold, blue = act. Fixed meaning everywhere — no colour doing two jobs.</div>
       <div class="b4a" style="margin-top:14px">Press feedback</div>

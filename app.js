@@ -344,7 +344,7 @@ function averageEntry(ex){return{weight:Number(ex.averageWeight??ex.startWeight)
 function goalEst(ex){return Math.max(1,entryEst(ex,goalEntry(ex)))}
 function scoreFromEntry(ex,e){const ratio=clamp(entryEst(ex,e)/goalEst(ex),0,1.35);return Math.round(clamp(100*Math.pow(ratio,1.42),5,100))}
 function volScore(ex,e){if(ex.scoreMode==='reps')return scoreFromEntry(ex,e);const g=volumeEntry(goalEntry(ex));const r=clamp(volumeEntry(e)/Math.max(1,g),0,1.35);return Math.round(clamp(100*Math.pow(r,.78),5,100))}
-function scoreColor(s){if(s>=90)return'var(--green)';if(s>=75)return'var(--gold2)';if(s>=60)return'var(--gold)';if(s>=45)return'var(--blue)';if(s>=30)return'var(--muted)';return'var(--red)'}
+function scoreColor(s){if(s>=90)return'var(--m5)';if(s>=75)return'var(--m4)';if(s>=60)return'var(--m3)';if(s>=45)return'var(--m2)';if(s>=30)return'var(--m1)';return'var(--m0)'}
 function rank(s){if(s>=90)return'Goal Range';if(s>=75)return'Advanced Track';if(s>=60)return'Intermediate Base';if(s>=45)return'Developing';if(s>=30)return'Beginner Base';return'Foundation Needed'}
 function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000)}
 
@@ -484,7 +484,7 @@ function readinessInfo(){
   if(avgRpe&&avgRpe>=9&&(status==='optimal'||status==='elevated')){status='elevated';label='Grinding';advice=`Recent sessions averaged RPE ${avgRpe} — effort is near maximal. Bank an easier session before pushing loads again.`;}
   return{ready:true,ratio:Math.round(ratio*100)/100,acute:Math.round(acute),chronic:Math.round(chronic),status,label,advice,avgRpe};
 }
-function readinessColor(st){return st==='optimal'?'var(--green)':st==='fresh'?'var(--blue)':st==='elevated'?'var(--gold2)':'var(--red)'}
+function readinessColor(st){return st==='optimal'?'var(--ok)':st==='fresh'?'var(--series2)':st==='elevated'?'var(--gold2)':'var(--risk)'}
 /* Training block: a dated mesocycle — build weeks then a deload week. During
    the deload week the session prefill drops loads 10% and resets to floor reps. */
 function blockInfo(){
@@ -566,7 +566,7 @@ function liftStats(ex){
   return{ex,n:p.length,ready:true,series:p,v,cur,peak,dd,mean,sd,sharpe,cagr,weeks,fit,z,goal,wksToGoal,spw,rating};
 }
 function plateauStat(ex){const st=liftStats(ex);if(!st.ready||st.n<4)return{flag:false,z:st.ready?st.z:0,n:st.n};return{flag:st.z<=-1,z:st.z,n:st.n};}
-function ratingColor(r){return r==='BUY'?'var(--green)':r==='REDUCE'?'var(--red)':r==='SWAP'?'var(--blue)':r==='NEW'?'var(--faint)':'var(--gold2)';}
+function ratingColor(r){return r==='BUY'?'var(--ok)':r==='REDUCE'?'var(--risk)':r==='SWAP'?'var(--series2)':r==='NEW'?'var(--faint)':'var(--gold2)';}
 function pctStr(x,dp){return (x>=0?'+':'')+(x*100).toFixed(dp==null?1:dp)+'%';}
 /* Portfolio-level: net-worth (OVR) curve, drawdown, CAGR, and volume allocation vs target. */
 function portfolioSummary(){
@@ -991,7 +991,7 @@ function renderRecoveryBanner(){
   return'';
 }
 
-function renderRadar(profile,best){const axes=radarAxes(),n=axes.length,cx=170,cy=155,maxR=108,pts=[];for(let i=0;i<n;i++){const a=-Math.PI/2+i*2*Math.PI/n;pts.push({x:cx+Math.cos(a)*maxR,y:cy+Math.sin(a)*maxR,a})}const poly=vals=>vals.map((v,i)=>`${cx+Math.cos(pts[i].a)*maxR*v/100},${cy+Math.sin(pts[i].a)*maxR*v/100}`).join(' ');return`<div class="radar-wrap"><svg class="radar" viewBox="0 0 340 310" aria-label="Score radar">${[25,50,75,100].map(r=>`<polygon points="${pts.map(p=>`${cx+(p.x-cx)*r/100},${cy+(p.y-cy)*r/100}`).join(' ')}" fill="none" stroke="var(--gridline)"/>`).join('')}${pts.map(p=>`<line x1="${cx}" y1="${cy}" x2="${p.x}" y2="${p.y}" stroke="var(--gridline2)"/>`).join('')}<polygon points="${poly(axes.map(a=>best[a.key]||0))}" fill="rgba(127,207,155,.13)" stroke="rgba(127,207,155,.5)" stroke-width="2"/><polygon class="radar-cur" points="${poly(axes.map(a=>profile[a.key]||0))}" fill="rgba(217,169,78,.22)" stroke="var(--gold2)" stroke-width="2.5"/>${pts.map((p,i)=>{const lx=cx+Math.cos(p.a)*(maxR+34),ly=cy+Math.sin(p.a)*(maxR+24);return`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="11">${axes[i].label}</text><text class="num" x="${lx}" y="${ly+14}" text-anchor="middle">${profile[axes[i].key]}</text>`}).join('')}</svg><div class="legend"><span><i class="dot" style="background:var(--gold2)"></i>Current</span><span><i class="dot" style="background:var(--green)"></i>Best</span></div></div>`}
+function renderRadar(profile,best){const axes=radarAxes(),n=axes.length,cx=170,cy=155,maxR=108,pts=[];for(let i=0;i<n;i++){const a=-Math.PI/2+i*2*Math.PI/n;pts.push({x:cx+Math.cos(a)*maxR,y:cy+Math.sin(a)*maxR,a})}const poly=vals=>vals.map((v,i)=>`${cx+Math.cos(pts[i].a)*maxR*v/100},${cy+Math.sin(pts[i].a)*maxR*v/100}`).join(' ');return`<div class="radar-wrap"><svg class="radar" viewBox="0 0 340 310" aria-label="Score radar">${[25,50,75,100].map(r=>`<polygon points="${pts.map(p=>`${cx+(p.x-cx)*r/100},${cy+(p.y-cy)*r/100}`).join(' ')}" fill="none" stroke="var(--gridline)"/>`).join('')}${pts.map(p=>`<line x1="${cx}" y1="${cy}" x2="${p.x}" y2="${p.y}" stroke="var(--gridline2)"/>`).join('')}<polygon points="${poly(axes.map(a=>best[a.key]||0))}" fill="none" stroke="var(--series2)" stroke-width="1.25" stroke-dasharray="3 4" opacity=".55"/><polygon class="radar-cur" points="${poly(axes.map(a=>profile[a.key]||0))}" fill="rgba(217,169,78,.22)" stroke="var(--gold2)" stroke-width="2.5"/>${pts.map((p,i)=>{const lx=cx+Math.cos(p.a)*(maxR+34),ly=cy+Math.sin(p.a)*(maxR+24);return`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="11">${axes[i].label}</text><text class="num" x="${lx}" y="${ly+14}" text-anchor="middle">${profile[axes[i].key]}</text>`}).join('')}</svg><div class="legend"><span><i class="dot" style="background:var(--gold2)"></i>Current</span><span><i class="dot" style="background:var(--series2)"></i>Best</span></div></div>`}
 
 /* Signature element: session progress rendered as a barbell loading plates. */
 function renderBarbell(pct){
@@ -1071,7 +1071,7 @@ function renderHome(){
   <div class="grid3 rot-grid">${state.program.map((d,i)=>`<button class="day ${i===state.currentDayIndex?'active':''}" data-action="start" data-day="${i}"><div class="daytop">DAY ${d.id}</div><div class="dayname">${esc(d.name)}</div><div class="small faint" style="margin-top:4px">${esc(d.focus)}</div></button>`).join('')}</div>
   <div class="duo">
   <div class="card body"><div><strong>Bodyweight</strong><div class="small faint">${state.bodyLog.length?`Logged ${state.bodyLog.length} times · last ${esc(state.bodyLog[state.bodyLog.length-1].date)}`:'Tap + / − then Log to build a trend.'}</div></div><div class="body-controls"><button class="secondary" data-action="bw" data-dir="-1" aria-label="Decrease bodyweight">−</button><div class="pill">${bodyweight()}KG</div><button class="secondary" data-action="bw" data-dir="1" aria-label="Increase bodyweight">+</button><button class="secondary gold" data-action="bw-log">Log</button></div></div>
-  ${state.bodyLog.length>1?`<div class="card">${renderTrendSvgRaw(state.bodyLog.map(x=>({value:x.kg})),null,'KG')}</div>`:''}
+  ${state.bodyLog.length>1?`<div class="card">${renderTrendSvgRaw(state.bodyLog.map(x=>({value:x.kg,date:x.date})),null,'KG')}</div>`:''}
   </div>
   <div class="section"><h2>Command center</h2><span>Tools</span></div>
   <div class="tool-grid">
@@ -1114,18 +1114,24 @@ function renderMedia(ex){return`<div class="media"><img src="${CLIP_BASE+esc(ex.
 function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   const d=state.session?.draft?.[ex.id]||targetEntry(ex),done=state.session?.setDone?.[ex.id]||[],last=latestEntryFor(ex),target=targetEntry(ex),score=scoreFromEntry(ex,last),earned=(d.reps||[]).every(r=>r>=ex.max),weakR=Math.min(...(d.reps||[ex.min])),fill=clamp((weakR-ex.min)/Math.max(1,ex.max-ex.min),0,1),warmups=Array.isArray(d.warmups)?d.warmups:[];
   const plates=ex.equipment==='barbell'&&Number(d.weight)>Number(state.settings.barWeight||20)?plateFor(d.weight):null;
+  /* Order is the design: identity, load, then the set log. Everything you
+     only occasionally need — adjustments, the demo, the cues — sits behind a
+     disclosure so the card ends at the thing you actually came to tap. */
   return `<article class="exercise" id="ex-${esc(ex.id)}">
   <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}Last: ${esc(fmtEntry(last))} · Target: ${esc(fmtEntry(target))}</div></div><button class="tag" data-action="exercise" data-ex="${ex.id}">Score ${score}</button></div>
-  ${renderMedia(ex)}
   <div class="range"><div class="bar"><div class="fill ${earned?'earned':''}" style="width:${fill*100}%"></div></div><div class="bar-labs"><span>${ex.min} reps</span><span>${earned&&ex.scoreMode!=='reps'?'Next load +'+ex.inc+'KG':'Top '+ex.max}</span></div></div>
   <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div></div>
-  <div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn gold" data-action="session-swap" data-group="${groupId}" data-base="${baseId}">Swap similar</button><button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">+ Warmup</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">+ Set</button><button class="mini-btn danger" data-action="remove-set" data-ex="${ex.id}">− Set</button>${warmups.length?`<button class="mini-btn danger" data-action="remove-warmup" data-ex="${ex.id}">− Warmup</button>`:''}</div>
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,last.reps?.[i]??last.reps?.[0]??ex.min,Boolean(done[i]))).join('')}</div>
-  ${(ex.cues||[]).length?`<div class="cues"><strong>Form cues</strong><ul>${(ex.cues||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+  ${panel(ex.id+':adjust','Adjust',`<div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">Add set</button><button class="mini-btn" data-action="remove-set" data-ex="${ex.id}">Remove set</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">Add warmup</button>${warmups.length?`<button class="mini-btn" data-action="remove-warmup" data-ex="${ex.id}">Remove warmup</button>`:''}<button class="mini-btn gold" data-action="session-swap" data-group="${groupId}" data-base="${baseId}">Swap similar</button><button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button></div>`)}
+  ${panel(ex.id+':demo','Demo and cues',renderMedia(ex)+((ex.cues||[]).length?`<div class="cues"><ul>${(ex.cues||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''))}
   </article>`;
 }
+/* Collapsible section. Native <details> does the work; the open set survives
+   the full re-render that follows every logged set. */
+const openPanels = new Set();
+function panel(key,label,body){return`<details class="ex-panel" data-panel="${esc(key)}"${openPanels.has(key)?' open':''}><summary>${esc(label)}</summary><div class="ex-panel-body">${body}</div></details>`}
 function renderWarmups(ex,warmups){return`<div class="warmup-box"><div class="warmup-title">Warmup ramp</div>${warmups.map((w,i)=>`<div class="warmrow"><div class="prev">WU ${i+1}</div><div class="warm-step"><button data-action="step" data-ex="${ex.id}" data-kind="warmWeight" data-index="${i}" data-dir="-1" aria-label="Decrease warmup weight">−</button><div class="warm-val mono">${fmtKg(w.weight)}</div><button data-action="step" data-ex="${ex.id}" data-kind="warmWeight" data-index="${i}" data-dir="1" aria-label="Increase warmup weight">+</button></div><div class="warm-step"><button data-action="step" data-ex="${ex.id}" data-kind="warmReps" data-index="${i}" data-dir="-1" aria-label="Decrease warmup reps">−</button><div class="warm-val mono">${w.reps}</div><button data-action="step" data-ex="${ex.id}" data-kind="warmReps" data-index="${i}" data-dir="1" aria-label="Increase warmup reps">+</button></div><button class="warm-log ${w.done?'is-done':''}" data-action="log-warmup" data-ex="${ex.id}" data-index="${i}">${w.done?'✓':'Log'}</button></div>`).join('')}</div>`}
 function renderSetRow(ex,i,r,prev,done){
   const adv=Boolean(state.settings.advancedMode);
@@ -1133,14 +1139,90 @@ function renderSetRow(ex,i,r,prev,done){
   const rpeBtn=adv?`<button class="rpe-btn ${rpe?'on':''}" data-action="rpe" data-ex="${ex.id}" data-index="${i}" title="Tap to cycle effort (RPE)" aria-label="Set ${i+1} RPE">${rpe?('@'+rpe):'RPE'}</button>`:'';
   return`<div class="setrow ${done?'done':''} ${adv?'adv':''}"><div class="setn">SET ${i+1}</div><div class="prev">PREV<br>${prev}</div><div class="rep-step"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="-1" aria-label="Decrease reps">−</button><input class="rep-val num-in" inputmode="numeric" type="number" step="1" min="0" max="100" value="${r}" data-num="reps" data-index="${i}" data-ex="${ex.id}" aria-label="Set ${i+1} reps"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="1" aria-label="Increase reps">+</button></div>${rpeBtn}<button class="set-log ${done?'is-done':''}" data-action="logset" data-ex="${ex.id}" data-index="${i}">${done?'✓ Done':'Log'}</button></div>`}
 
-function renderMaxChart(){const rows=allExercises().map(ex=>{const curr=entryEst(ex,latestEntryFor(ex)),avg=entryEst(ex,averageEntry(ex)),goal=goalEst(ex),scale=Math.max(goal,avg,curr,1)*1.1;return`<div class="stat-row" data-action="exercise" data-ex="${ex.id}"><div class="stat-top"><div><div class="stat-name">${esc(ex.name)}</div><div class="small faint">Current ${Math.round(curr)} · Reference ${Math.round(avg)} · Goal ${Math.round(goal)}</div></div><div class="stat-num" style="color:${scoreColor(scoreFromEntry(ex,latestEntryFor(ex)))}">${scoreFromEntry(ex,latestEntryFor(ex))}</div></div><div class="stat-bar"><span class="stat-average" style="width:${clamp(avg/scale*100,0,100)}%"></span><span class="stat-current" style="width:${clamp(curr/scale*100,0,100)}%"></span><span class="stat-goal" style="left:${clamp(goal/scale*100,0,100)}%"></span></div></div>`}).join('');return`<div class="card"><div class="legend"><span><i class="dot" style="background:var(--blue)"></i>Current est max</span><span><i class="dot" style="background:var(--green)"></i>Reference</span><span><i class="dot" style="background:var(--ink2)"></i>Goal</span></div>${rows}</div>`}
+function renderMaxChart(){const rows=allExercises().map(ex=>{const curr=entryEst(ex,latestEntryFor(ex)),avg=entryEst(ex,averageEntry(ex)),goal=goalEst(ex),scale=Math.max(goal,avg,curr,1)*1.1;return`<div class="stat-row" data-action="exercise" data-ex="${ex.id}"><div class="stat-top"><div><div class="stat-name">${esc(ex.name)}</div><div class="small faint">Current ${Math.round(curr)} · Reference ${Math.round(avg)} · Goal ${Math.round(goal)}</div></div><div class="stat-num" style="color:${scoreColor(scoreFromEntry(ex,latestEntryFor(ex)))}">${scoreFromEntry(ex,latestEntryFor(ex))}</div></div><div class="stat-bar"><span class="stat-average" style="width:${clamp(avg/scale*100,0,100)}%"></span><span class="stat-current" style="width:${clamp(curr/scale*100,0,100)}%"></span><span class="stat-goal" style="left:${clamp(goal/scale*100,0,100)}%"></span></div></div>`}).join('');return`<div class="card"><div class="legend"><span><i class="dot" style="background:var(--series)"></i>Current est max</span><span><i class="dot" style="background:rgba(242,239,231,.14)"></i>Reference</span><span><i class="dot" style="background:var(--ink2)"></i>Goal</span></div>${rows}</div>`}
 
 function renderSummary(){const p=computeProfile(),b=bestProfile(),sum=trainingSummary();const advice=nextScoreAdvice();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('summary')}<section class="hero"><div class="eyebrow">Summary sheet</div><div class="level-head"><div><div class="title" style="color:${scoreColor(p.overall)}">Overall ${p.overall}</div><div class="sub">Current performance against your 100-score goal standards.</div></div><div class="rank" style="color:${scoreColor(p.overall)}">${rank(p.overall)}</div></div></section><div class="grid3"><div class="metric"><div class="num">${sum.total}</div><div class="lab">Sessions</div></div><div class="metric"><div class="num">${sum.prs}</div><div class="lab">PRs</div></div><div class="metric"><div class="num">${bodyweight()}</div><div class="lab">Body KG</div></div></div><div class="section"><h2>Next score increase</h2><span>Actionable</span></div><div class="card"><ol class="feedback-list">${advice.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><div class="section"><h2>Strength ledger</h2><span>Tap a lift</span></div>${renderMaxChart()}<div class="section"><h2>Category sheet</h2><span>Current vs best</span></div><div class="card">${radarAxes().map(a=>`<div class="row"><div><strong>${a.label}</strong><div class="small faint">Best ${b[a.key]}</div></div><div class="mono" style="color:${scoreColor(p[a.key])}">${p[a.key]}</div></div>`).join('')}</div></div>`}
 
 function renderWeekly(){const list=weeklyWindow(),weak=weakPoint(),proj=projection();let best='None yet',bestScore=-1;for(const ex of allExercises()){const sc=scoreFromEntry(ex,latestEntryFor(ex));if(sc>bestScore){bestScore=sc;best=ex.name}}const worst=weak.exercises[0]?.ex.name||'None yet';const stuck=allExercises().map(ex=>({ex,p:plateauInfo(ex)})).filter(x=>x.p.stuck);const deload=deloadAdvice();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('weekly')}<section class="hero"><div class="eyebrow">Weekly review</div><div class="title">${list.length} session${list.length===1?'':'s'}</div><div class="sub">A coaching summary for the last seven days.</div></section><div class="grid2"><div class="metric"><div class="num">${totalVolumeForSessions(list)}</div><div class="lab">KG volume</div></div><div class="metric"><div class="num">${list.reduce((s,x)=>s+(x.prs?x.prs.length:0),0)}</div><div class="lab">PRs</div></div><div class="metric"><div class="num">${trainingSummary().missed}</div><div class="lab">Missed days</div></div><div class="metric"><div class="num">${computeProfile().overall}</div><div class="lab">OVR</div></div></div>${deload.map(d=>`<div class="banner warn"><strong>Deload advised</strong><div>${esc(d)}</div></div>`).join('')}${renderReadiness(true)}${renderBlockCard()}${renderMuscleVolume()}<div class="section"><h2>Coach recommendation</h2><span>Next 7 days</span></div><div class="card"><div class="row"><div><strong>Weakest area: ${weak.area.label}</strong><div class="small faint">Best focus: ${weak.exercises.map(x=>x.ex.name).join(' and ')||'Log more data'}</div></div><div class="mono" style="color:${scoreColor(weak.area.score)}">${weak.area.score}</div></div><ol class="feedback-list">${(weak.exercises.length?weak.exercises.map(x=>`Add 1 to 2 total reps on ${x.ex.name}, aiming for ${fmtEntry(targetEntry(x.ex))}.`):['Complete two more sessions to generate a target.']).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div>${stuck.length?`<div class="section"><h2>Plateau watch</h2><span>${stuck.length} lift${stuck.length===1?'':'s'}</span></div><div class="card">${stuck.map(x=>`<div class="row"><div><strong>${esc(x.ex.name)}</strong><div class="small faint">${x.p.since} sessions since the last estimated-max PR.</div></div><button class="secondary" data-action="exercise" data-ex="${x.ex.id}">Open</button></div>`).join('')}</div>`:''}<div class="section"><h2>Weekly facts</h2><span>Summary</span></div><div class="card"><div class="row"><span>Best exercise</span><strong>${esc(best)}</strong></div><div class="row"><span>Weakest exercise</span><strong>${esc(worst)}</strong></div><div class="row"><span>Projection</span><strong>${esc(proj.message)}</strong></div></div>${renderTrainingTracker()}</div>`}
 
 function trendPoints(ex){return sessionsForEx(ex).map(x=>({date:x.session.date,value:entryEst(ex,x.entry),session:x.session,entry:x.entry}))}
-function renderTrendSvgRaw(points,goal,unit){if(points.length<2)return`<div class="small faint">Log twice to generate a trend line.</div>`;const w=330,h=140,pad=22;const vals=points.map(p=>p.value);const lo=Math.min(...vals,goal??Infinity)*0.98,hi=Math.max(...vals,goal??1,1)*1.02;const xs=points.map((p,i)=>pad+i*(w-2*pad)/Math.max(1,points.length-1));const ys=vals.map(v=>h-pad-(v-lo)/Math.max(.0001,hi-lo)*(h-2*pad));const poly=xs.map((x,i)=>`${x},${ys[i]}`).join(' ');const area=`${pad},${h-pad} ${poly} ${xs[xs.length-1]},${h-pad}`;const goalY=goal!=null?h-pad-(goal-lo)/Math.max(.0001,hi-lo)*(h-2*pad):null;return`<svg class="chart" viewBox="0 0 ${w} ${h}"><line class="grid" x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/>${goalY!=null&&goalY>pad?`<line class="goal-line" x1="${pad}" y1="${goalY}" x2="${w-pad}" y2="${goalY}"/>`:''}<polygon class="area" points="${area}"/><polyline class="line" points="${poly}"/>${xs.map((x,i)=>`<circle class="dotp" cx="${x}" cy="${ys[i]}" r="3"/>`).join('')}<text x="${pad}" y="14">${Math.round(hi)}${unit?' '+unit:''}</text><text x="${pad}" y="${h-5}">${Math.round(lo)}</text></svg>`}
+/* ============ CHART ENGINE ================================================
+   Charts are declared as specs during render and painted afterwards, once the
+   host element's real width is known, so every SVG is drawn 1:1 in device
+   pixels. The old charts used a fixed viewBox="0 0 330 140" stretched to a
+   1400px column, which scaled 10px axis type up to ~40px on a laptop.
+   ========================================================================== */
+const CHARTS = new Map();
+let chartSeq = 0;
+function chartHost(spec,cls){const id='ch'+(++chartSeq);CHARTS.set(id,spec);return`<div class="chart-host ${cls||''}" id="${id}"></div>`}
+function paintCharts(){
+  for (const [id,spec] of CHARTS){
+    const host=document.getElementById(id); if(!host) continue;
+    const w=Math.max(220,host.clientWidth), h=Math.max(110,host.clientHeight);
+    try{ host.innerHTML = spec.type==='model'?drawModel(spec,w,h):drawTrend(spec,w,h); }
+    catch(_){ host.innerHTML=''; }
+  }
+}
+/* Round an axis to human numbers so gridlines land on 5s and 10s, not 37.4. */
+function niceBounds(lo,hi){
+  if(!(hi>lo)){hi=lo+1}
+  const span=hi-lo, mag=Math.pow(10,Math.floor(Math.log10(span/2||1)));
+  const step=[1,2,2.5,5,10].map(m=>m*mag).find(x=>span/x<=4)||mag*10;
+  return {lo:Math.floor(lo/step)*step, hi:Math.ceil(hi/step)*step, step};
+}
+function shortDate(d){try{return new Date(d+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})}catch(_){return''}}
+const PAD={l:40,r:16,t:16,b:24};
+function drawTrend(spec,w,h){
+  const pts=spec.points;
+  if(!pts||pts.length<2)return`<div class="chart-empty">Two logged sessions draw the first line.</div>`;
+  const vals=pts.map(p=>Number(p.value)||0);
+  const pool=spec.goal!=null?[...vals,spec.goal]:vals;
+  const b=niceBounds(Math.min(...pool),Math.max(...pool));
+  const X=i=>PAD.l+i*(w-PAD.l-PAD.r)/Math.max(1,pts.length-1);
+  const Y=v=>h-PAD.b-(v-b.lo)/(b.hi-b.lo)*(h-PAD.t-PAD.b);
+  const poly=vals.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const area=`${X(0).toFixed(1)},${h-PAD.b} ${poly} ${X(pts.length-1).toFixed(1)},${h-PAD.b}`;
+  const ticks=[];for(let v=b.lo;v<=b.hi+1e-9;v+=b.step)ticks.push(v);
+  /* The unit rides on the top tick instead of getting its own label, which
+     used to collide with it. */
+  const grid=ticks.map((v,i)=>`<line class="grid" x1="${PAD.l}" y1="${Y(v).toFixed(1)}" x2="${w-PAD.r}" y2="${Y(v).toFixed(1)}"/><text class="ax" x="${PAD.l-8}" y="${(Y(v)+3.5).toFixed(1)}" text-anchor="end">${Math.round(v)}${i===ticks.length-1&&spec.unit?' '+esc(spec.unit):''}</text>`).join('');
+  const goalY=spec.goal!=null?Y(spec.goal):null;
+  const first=pts[0].date?shortDate(pts[0].date):'', last=pts[pts.length-1].date?shortDate(pts[pts.length-1].date):'';
+  /* Only the last point gets a dot: the line is the story, the dot is "you are here". */
+  return`<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(spec.label||'Trend')}">
+  ${grid}
+  ${goalY!=null&&goalY>PAD.t?`<line class="goal-line" x1="${PAD.l}" y1="${goalY.toFixed(1)}" x2="${w-PAD.r}" y2="${goalY.toFixed(1)}"/><text class="ax gold" x="${w-PAD.r}" y="${(goalY-6).toFixed(1)}" text-anchor="end">GOAL</text>`:''}
+  <polygon class="area" points="${area}"/>
+  <polyline class="line" points="${poly}" pathLength="1"/>
+  <circle class="dotp" cx="${X(pts.length-1).toFixed(1)}" cy="${Y(vals[vals.length-1]).toFixed(1)}" r="3.5"/>
+  ${first?`<text class="ax" x="${PAD.l}" y="${h-6}">${esc(first)}</text>`:''}
+  ${last?`<text class="ax" x="${w-PAD.r}" y="${h-6}" text-anchor="end">${esc(last)}</text>`:''}
+  </svg>`;
+}
+function drawModel(spec,w,h){
+  const {v,fit,goal,fc}=spec, n=v.length, xmax=n-1+fc;
+  const fitAt=i=>fit.slope*i+fit.intercept;
+  const b=niceBounds(Math.min(...v,fitAt(xmax)-fit.rsd,goal),Math.max(...v,fitAt(xmax)+fit.rsd,goal));
+  const X=i=>PAD.l+i*(w-PAD.l-PAD.r)/Math.max(1,xmax);
+  const Y=val=>h-PAD.b-(val-b.lo)/(b.hi-b.lo)*(h-PAD.t-PAD.b);
+  const ticks=[];for(let t=b.lo;t<=b.hi+1e-9;t+=b.step)ticks.push(t);
+  const grid=ticks.map(t=>`<line class="grid" x1="${PAD.l}" y1="${Y(t).toFixed(1)}" x2="${w-PAD.r}" y2="${Y(t).toFixed(1)}"/><text class="ax" x="${PAD.l-8}" y="${(Y(t)+3.5).toFixed(1)}" text-anchor="end">${Math.round(t)}</text>`).join('');
+  const band=`${X(n-1)},${Y(fitAt(n-1)+fit.rsd)} ${X(xmax)},${Y(fitAt(xmax)+fit.rsd)} ${X(xmax)},${Y(fitAt(xmax)-fit.rsd)} ${X(n-1)},${Y(fitAt(n-1)-fit.rsd)}`;
+  const goalY=Y(goal);
+  return`<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(spec.label||'Progression model')}">
+  ${grid}
+  ${goalY>PAD.t&&goalY<h-PAD.b?`<line class="goal-line" x1="${PAD.l}" y1="${goalY.toFixed(1)}" x2="${w-PAD.r}" y2="${goalY.toFixed(1)}"/><text class="ax gold" x="${w-PAD.r}" y="${(goalY-6).toFixed(1)}" text-anchor="end">GOAL</text>`:''}
+  <polygon class="fband" points="${band}"/>
+  <polyline class="fit" points="${X(0)},${Y(fitAt(0))} ${X(n-1)},${Y(fitAt(n-1))}"/>
+  <polyline class="fcast" points="${X(n-1)},${Y(fitAt(n-1))} ${X(xmax)},${Y(fitAt(xmax))}"/>
+  <polyline class="line thin" points="${v.map((val,i)=>`${X(i).toFixed(1)},${Y(val).toFixed(1)}`).join(' ')}" pathLength="1"/>
+  ${v.map((val,i)=>`<circle class="dotp" cx="${X(i).toFixed(1)}" cy="${Y(val).toFixed(1)}" r="2.5"/>`).join('')}
+  <text class="ax" x="${X(n-1).toFixed(1)}" y="${h-6}" text-anchor="middle">NOW</text>
+  <text class="ax" x="${w-PAD.r}" y="${h-6}" text-anchor="end">+${fc}</text>
+  </svg>`;
+}
+/* Kept as the one entry point every view uses to ask for a trend line. */
+function renderTrendSvgRaw(points,goal,unit,cls){return chartHost({type:'trend',points,goal,unit,label:unit?`Trend in ${unit}`:'Trend'},cls)}
 function renderExerciseDetail(){const ex=exById(selectedExId),pts=trendPoints(ex),best=bestEntryFor(ex),latest=latestEntryFor(ex),target=targetEntry(ex);const sameWeight=pts.filter(p=>Number(p.entry.weight)===Number(latest.weight)).map(p=>bestReps(p.entry.reps));const plat=plateauInfo(ex);return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('summary')}<button class="back" data-action="summary">‹ Summary</button><section class="hero"><div class="eyebrow">${esc(MUSCLE_LABEL[ex.muscle]||ex.muscle)} · ${esc(ex.equipment||'')}</div><div class="title">${esc(ex.name)}</div><div class="sub">Trend, PR history and the exact next number to beat.</div></section>${plat.stuck?`<div class="banner warn"><strong>Plateau</strong><div>${plat.since} sessions without an estimated-max PR. Options: hold the load and add one rep per set, add a back-off set, or swap the movement for 4 weeks in Edit program.</div></div>`:''}<div class="card">${renderTrendSvgRaw(pts,goalEst(ex),'')}</div><div class="grid2"><div class="metric"><div class="num">${Math.round(entryEst(ex,latest))}</div><div class="lab">Current est max</div></div><div class="metric"><div class="num">${Math.round(entryEst(ex,best.entry))}</div><div class="lab">Best est max</div></div><div class="metric"><div class="num">${Math.round(Math.max(0,...pts.map(p=>volumeEntry(p.entry))))}</div><div class="lab">Best volume</div></div><div class="metric"><div class="num">${sameWeight.length?Math.max(...sameWeight):bestReps(latest.reps)}</div><div class="lab">Best reps at load</div></div></div><div class="card"><div class="row"><span>Best date</span><strong>${esc(best.date)}</strong></div><div class="row"><span>Current target</span><strong>${esc(fmtEntry(target))}</strong></div><div class="row"><span>Goal standard</span><strong>${esc(fmtEntry(goalEntry(ex)))}</strong></div></div>${renderProgressionModel(ex)}${renderMedia(ex)}</div>`}
 
 function renderPRs(){const feed=prFeed();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('home')}<button class="back" data-action="home">‹ Home</button><section class="hero"><div class="eyebrow">PR timeline</div><div class="title">${feed.length} record${feed.length===1?'':'s'}</div><div class="sub">Every personal record, newest first.</div></section><div class="card flat">${feed.length?feed.map(p=>`<div class="row"><div><strong>${esc(p.name)}</strong><div class="small faint">${esc(p.date)} · Day ${esc(p.day)} · ${esc(p.kind)}</div></div><div class="mono" style="color:var(--gold2)">${p.old}→${p.now}</div></div>`).join(''):'<div class="small faint">No PRs yet. They appear automatically when a logged session beats your best.</div>'}</div></div>`}
@@ -1195,7 +1277,7 @@ function renderData(){
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Danger zone</strong><div class="small faint">Reset is double-confirmed and leaves a pre-reset snapshot.</div></div><button class="secondary danger" data-action="reset">Reset local data</button></div></div></div>`;
 }
 
-function renderReport(){const r=state.lastReport;if(!r){view='home';return renderHome()}const good=['S','A'].includes(r.grade);return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('report')}<section class="hero report-hero"><div class="eyebrow">Workout report</div><div class="report-grade ${good?'good':''}">${esc(r.grade)}</div><div class="report-narr">${esc(r.narrative)}</div><div class="report-sub mono">OVR ${r.overall} (${r.delta>=0?'+':''}${r.delta}) · ${r.comp.up}↑ ${r.comp.held}→ ${r.comp.down}↓ · ${r.completion}% · ${r.durationMin} min · ${r.volume||0}KG${r.rpe?` · @${r.rpe} RPE`:''}</div>${r.prs?.length?`<div class="pr"><strong>New PRs:</strong> ${r.prs.slice(0,5).map(p=>`${esc(p.name)} ${esc(p.kind)} ${p.old}→${p.now}`).join(' · ')}</div>`:''}<div class="feedback"><div class="feedback-title">What to improve next time</div><ol class="feedback-list">${r.feedback.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><button class="primary" data-action="summary">Open summary sheet</button><button class="secondary block" data-action="home">Back home</button></section><div class="section"><h2>Movement deltas</h2><span>Vs ${r.first?'baseline':'last same day'}</span></div><div class="card flat">${r.comp.lines.map(l=>`<div class="row"><div><strong>${esc(l.name)}</strong><div class="small faint">Strength ${Math.round(l.strength*1000)/10}% · Volume ${Math.round(l.vol*1000)/10}%</div></div><div class="mono" style="color:${l.dir==='up'?'var(--green)':l.dir==='down'?'var(--red)':'var(--muted)'}">${l.index>=0?'+':''}${Math.round(l.index*1000)/10}%</div></div>`).join('')}</div></div>`}
+function renderReport(){const r=state.lastReport;if(!r){view='home';return renderHome()}const good=['S','A'].includes(r.grade);return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('report')}<section class="hero report-hero"><div class="eyebrow">Workout report</div><div class="report-grade ${good?'good':''}">${esc(r.grade)}</div><div class="report-narr">${esc(r.narrative)}</div><div class="report-sub mono">OVR ${r.overall} (${r.delta>=0?'+':''}${r.delta}) · ${r.comp.up}↑ ${r.comp.held}→ ${r.comp.down}↓ · ${r.completion}% · ${r.durationMin} min · ${r.volume||0}KG${r.rpe?` · @${r.rpe} RPE`:''}</div>${r.prs?.length?`<div class="pr"><strong>New PRs:</strong> ${r.prs.slice(0,5).map(p=>`${esc(p.name)} ${esc(p.kind)} ${p.old}→${p.now}`).join(' · ')}</div>`:''}<div class="feedback"><div class="feedback-title">What to improve next time</div><ol class="feedback-list">${r.feedback.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><button class="primary" data-action="summary">Open summary sheet</button><button class="secondary block" data-action="home">Back home</button></section><div class="section"><h2>Movement deltas</h2><span>Vs ${r.first?'baseline':'last same day'}</span></div><div class="card flat">${r.comp.lines.map(l=>`<div class="row"><div><strong>${esc(l.name)}</strong><div class="small faint">Strength ${Math.round(l.strength*1000)/10}% · Volume ${Math.round(l.vol*1000)/10}%</div></div><div class="mono" style="color:${l.dir==='up'?'var(--ok)':l.dir==='down'?'var(--risk)':'var(--muted)'}">${l.index>=0?'+':''}${Math.round(l.index*1000)/10}%</div></div>`).join('')}</div></div>`}
 
 /* ---- Original 1: Strength Portfolio ---- */
 function renderPortfolio(){
@@ -1206,14 +1288,14 @@ function renderPortfolio(){
     return head+`<section class="hero"><div class="eyebrow">Strength portfolio</div><div class="title">Coverage opens soon</div><div class="sub">Every lift becomes a rated position after two logged sessions. Log a full rotation to open the book.</div></section><div class="card"><div class="small faint">No positions yet. Start a session from Home — returns, volatility, drawdown and ratings appear here automatically.</div></div></div>`;
   }
   const sorted=ready.slice().sort((a,b)=>b.mean-a.mean);
-  const rows=sorted.map(l=>`<button class="pos-row" data-action="exercise" data-ex="${l.ex.id}"><div class="pos-top"><div class="pos-name">${esc(l.ex.name)}</div><div class="rating" style="color:${ratingColor(l.rating)}">${l.rating}</div></div><div class="pos-stats"><div class="pstat"><div class="v">${Math.round(l.cur)}</div><div class="k">e1RM</div></div><div class="pstat"><div class="v" style="color:${l.mean>=0?'var(--pos)':'var(--neg)'}">${pctStr(Math.max(-0.99,Math.min(0.99,l.mean)))}</div><div class="k">ret/wk</div></div><div class="pstat"><div class="v">${l.sharpe.toFixed(2)}</div><div class="k">consist</div></div><div class="pstat"><div class="v" style="color:${l.dd<=-.02?'var(--neg)':'var(--muted)'}">${(l.dd*100).toFixed(1)}%</div><div class="k">draw</div></div></div></button>`).join('');
-  const nwCard=ps.tl.length>=2?`<div class="card">${renderTrendSvgRaw(ps.tl.map(x=>({value:x.overall})),null,'')}</div>`:'';
+  const rows=sorted.map(l=>`<button class="pos-row" data-action="exercise" data-ex="${l.ex.id}"><div class="pos-top"><div class="pos-name">${esc(l.ex.name)}</div><div class="rating" style="color:${ratingColor(l.rating)}">${l.rating}</div></div><div class="pos-stats"><div class="pstat"><div class="v">${Math.round(l.cur)}</div><div class="k">e1RM</div></div><div class="pstat"><div class="v" style="color:${l.mean>=0?'var(--ok)':'var(--risk)'}">${pctStr(Math.max(-0.99,Math.min(0.99,l.mean)))}</div><div class="k">ret/wk</div></div><div class="pstat"><div class="v">${l.sharpe.toFixed(2)}</div><div class="k">consist</div></div><div class="pstat"><div class="v" style="color:${l.dd<=-.02?'var(--risk)':'var(--muted)'}">${(l.dd*100).toFixed(1)}%</div><div class="k">draw</div></div></div></button>`).join('');
+  const nwCard=ps.tl.length>=2?`<div class="card">${renderTrendSvgRaw(ps.tl.map(x=>({value:x.overall,date:x.date})),null,'OVR','tall')}</div>`:'';
   const alloc=ps.alloc.filter(a=>a.share>0).sort((a,b)=>b.share-a.share);
   const allocRows=alloc.map(a=>`<div class="alloc-row"><span class="alloc-name">${MUSCLE_LABEL[a.m]||a.m}</span><span class="alloc-bar"><i class="alloc-fill ${a.drift<-0.02?'under':''}" style="width:${clamp(a.share*100,0,100)}%"></i><i class="alloc-target" style="left:${clamp(ps.target*100,0,100)}%"></i></span><span class="alloc-num">${Math.round(a.share*100)}% · ${a.drift>=0?'+':''}${Math.round(a.drift*100)}%</span></div>`).join('');
   const under=alloc.slice().sort((a,b)=>a.drift-b.drift)[0];
   return head+`
-  <section class="hero"><div class="eyebrow">Strength portfolio</div><div class="level-head"><div><div class="title" style="color:${scoreColor(ps.nw||0)}">Net worth ${ps.nw!=null?ps.nw:'—'}</div><div class="sub">Your lifts as a book of positions. Valuation is estimated 1RM; return is its weekly rate of change.</div></div>${ps.dd!=null?`<div class="rank" style="color:${ps.dd<=-.02?'var(--red)':'var(--green)'}">${(ps.dd*100).toFixed(1)}% DD</div>`:''}</div></section>
-  <div class="grid3"><div class="metric"><div class="num">${ready.length}</div><div class="lab">Positions</div></div><div class="metric"><div class="num" style="color:${(ps.cagr||0)>=0?'var(--green)':'var(--red)'}">${ps.cagr!=null?pctStr(ps.cagr,0):'—'}</div><div class="lab">CAGR / 4wk</div></div><div class="metric"><div class="num">${ps.peak!=null?ps.peak:'—'}</div><div class="lab">Peak OVR</div></div></div>
+  <section class="hero"><div class="eyebrow">Strength portfolio</div><div class="level-head"><div><div class="title" style="color:${scoreColor(ps.nw||0)}">Net worth ${ps.nw!=null?ps.nw:'—'}</div><div class="sub">Your lifts as a book of positions. Valuation is estimated 1RM; return is its weekly rate of change.</div></div>${ps.dd!=null?`<div class="rank" style="color:${ps.dd<=-.02?'var(--risk)':'var(--ok)'}">${(ps.dd*100).toFixed(1)}% DD</div>`:''}</div></section>
+  <div class="grid3"><div class="metric"><div class="num">${ready.length}</div><div class="lab">Positions</div></div><div class="metric"><div class="num" style="color:${(ps.cagr||0)>=0?'var(--ok)':'var(--risk)'}">${ps.cagr!=null?pctStr(ps.cagr,0):'—'}</div><div class="lab">CAGR / 4wk</div></div><div class="metric"><div class="num">${ps.peak!=null?ps.peak:'—'}</div><div class="lab">Peak OVR</div></div></div>
   ${nwCard}
   <div class="section"><h2>Positions</h2><span>Tap a lift</span></div>
   <div class="card flat">${rows}</div>
@@ -1226,21 +1308,10 @@ function renderPortfolio(){
 function renderProgressionModel(ex){
   const st=liftStats(ex);
   if(!st.ready)return `<div class="card"><strong>Progression model</strong><div class="small faint" style="margin-top:6px">Log this lift at least twice to fit a trend and forecast the path to your goal.</div></div>`;
-  const v=st.v,n=v.length,fc=3,fit=st.fit,goal=st.goal;
-  const w=330,h=150,pad=24,xmax=n-1+fc;
-  const fitAt=i=>fit.slope*i+fit.intercept;
-  const allY=[...v,fitAt(xmax)+fit.rsd,fitAt(xmax)-fit.rsd,goal];
-  const lo=Math.min(...allY)*0.98,hi=Math.max(...allY)*1.02;
-  const X=i=>pad+i*(w-2*pad)/Math.max(1,xmax);
-  const Y=val=>h-pad-(val-lo)/Math.max(.0001,hi-lo)*(h-2*pad);
-  const fitLine=`${X(0)},${Y(fitAt(0))} ${X(n-1)},${Y(fitAt(n-1))}`;
-  const fcLine=`${X(n-1)},${Y(fitAt(n-1))} ${X(xmax)},${Y(fitAt(xmax))}`;
-  const band=`${X(n-1)},${Y(fitAt(n-1)+fit.rsd)} ${X(xmax)},${Y(fitAt(xmax)+fit.rsd)} ${X(xmax)},${Y(fitAt(xmax)-fit.rsd)} ${X(n-1)},${Y(fitAt(n-1)-fit.rsd)}`;
-  const goalY=Y(goal);
-  const svg=`<svg class="chart" viewBox="0 0 ${w} ${h}" aria-label="${esc(ex.name)} progression model"><line class="grid" x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}"/>${goalY>pad&&goalY<h-pad?`<line class="goal-line" x1="${pad}" y1="${goalY}" x2="${w-pad}" y2="${goalY}"/>`:''}<polygon class="fband" points="${band}"/><polyline class="fit" points="${fitLine}"/><polyline class="fcast" points="${fcLine}"/>${v.map((val,i)=>`<circle class="dotp" cx="${X(i)}" cy="${Y(val)}" r="3"/>`).join('')}<text x="${pad}" y="14">${Math.round(hi)}</text><text x="${pad}" y="${h-6}">${Math.round(lo)}</text></svg>`;
+  const svg=chartHost({type:'model',v:st.v,fit:st.fit,goal:st.goal,fc:3,label:`${ex.name} progression model`},'tall');
   const trend=st.spw>0.05?`+${st.spw.toFixed(1)}/wk`:st.spw<-0.05?`${st.spw.toFixed(1)}/wk`:'flat';
   const plat=st.z<=-1&&st.n>=4;
-  return `<div class="card"><div class="row" style="padding-top:0"><div><strong>Progression model</strong><div class="small faint">Blue = fitted trend · gold dashed = forecast ± noise · line = goal</div></div><div class="rating" style="color:${ratingColor(st.rating)}">${st.rating}</div></div>${svg}<div class="grid3"><div class="metric"><div class="num">${trend}</div><div class="lab">Trend slope</div></div><div class="metric"><div class="num" style="color:${plat?'var(--red)':'var(--muted)'}">${st.z.toFixed(2)}</div><div class="lab">Plateau z</div></div><div class="metric"><div class="num">${st.wksToGoal!=null?st.wksToGoal:'—'}</div><div class="lab">Weeks to goal</div></div></div>${plat?`<div class="banner warn" style="margin-top:10px"><strong>Statistical plateau</strong><div>Last session sits ${Math.abs(st.z).toFixed(1)} SD below this lift's own trend. Hold load and add a rep, add a back-off set, or swap for 4 weeks.</div></div>`:''}</div>`;
+  return `<div class="card"><div class="row" style="padding-top:0"><div><strong>Progression model</strong><div class="small faint">Ink line = fitted trend. Gold dashed = forecast, shaded by its noise. GOAL is your standard.</div></div><div class="rating" style="color:${ratingColor(st.rating)}">${st.rating}</div></div>${svg}<div class="grid3"><div class="metric"><div class="num">${trend}</div><div class="lab">Trend slope</div></div><div class="metric"><div class="num" style="color:${plat?'var(--risk)':'var(--muted)'}">${st.z.toFixed(2)}</div><div class="lab">Plateau z</div></div><div class="metric"><div class="num">${st.wksToGoal!=null?st.wksToGoal:'—'}</div><div class="lab">Weeks to goal</div></div></div>${plat?`<div class="banner warn" style="margin-top:10px"><strong>Statistical plateau</strong><div>Last session sits ${Math.abs(st.z).toFixed(1)} SD below this lift's own trend. Hold load and add a rep, add a back-off set, or swap for 4 weeks.</div></div>`:''}</div>`;
 }
 
 /* ---- Original 3: Analyst desk (research note + what-if optimizer) ---- */
@@ -1250,7 +1321,7 @@ function renderAnalyst(){
   if(!a.ready.length){
     return head+`<section class="hero"><div class="eyebrow">Analyst desk</div><div class="title">No coverage yet</div><div class="sub">${esc(a.headline)}</div></section></div>`;
   }
-  const liftLine=l=>`<div class="row"><div><strong>${esc(l.ex.name)}</strong><div class="small faint">e1RM ${Math.round(l.cur)} · consistency ${l.sharpe.toFixed(2)}</div></div><div class="mono" style="color:${l.mean>=0?'var(--green)':'var(--red)'}">${pctStr(l.mean)}/wk</div></div>`;
+  const liftLine=l=>`<div class="row"><div><strong>${esc(l.ex.name)}</strong><div class="small faint">e1RM ${Math.round(l.cur)} · consistency ${l.sharpe.toFixed(2)}</div></div><div class="mono" style="color:${l.mean>=0?'var(--ok)':'var(--risk)'}">${pctStr(l.mean)}/wk</div></div>`;
   const risk=l=>`<div class="row"><div><strong>${esc(l.ex.name)}</strong><div class="small faint">${l.dd<=-0.05?`${(l.dd*100).toFixed(0)}% off peak`:`plateau ${l.z.toFixed(1)} SD`}</div></div><button class="secondary" data-action="exercise" data-ex="${l.ex.id}">Open</button></div>`;
   const wi=a.wi.map(x=>`<div class="row"><div><strong>${esc(x.ex.name)}</strong><div class="small faint">→ ${esc(fmtEntry(x.t))}</div></div><div class="mono" style="color:var(--gold2)">+${x.delta} OVR</div></div>`).join('');
   return head+`
@@ -1280,8 +1351,10 @@ function renderCrash(err){return`<div class="shell"><div class="card banner bad"
 function render(){
   try{
     const keepPosition=view==='workout';const scrollY=keepPosition?window.scrollY:0;
+    CHARTS.clear();
     const pages={home:renderHome,summary:renderSummary,weekly:renderWeekly,workout:renderWorkout,achievements:renderAchievements,history:renderHistory,editSession:renderEditSession,program:renderProgram,bank:renderBank,data:renderData,exercise:renderExerciseDetail,report:renderReport,prs:renderPRs,portfolio:renderPortfolio,analyst:renderAnalyst};
     app.innerHTML=(pages[view]||renderHome)()+renderConfirm();
+    paintCharts();
     if(keepPosition&&scrollY)requestAnimationFrame(()=>window.scrollTo(0,scrollY));
     crashed=false;
     if(view==='workout'){holdWake(true);if(!sessionClock)sessionClock=setInterval(tickSessionClock,15000)}
@@ -1366,6 +1439,11 @@ app.addEventListener('input',e=>{
   else if(t.dataset.search==='history'){historyQuery=t.value;const card=document.querySelector('.card.flat');if(card){const scroll=window.scrollY;render();window.scrollTo(0,scroll);const inp=document.querySelector('[data-search="history"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}}}
   else if(t.dataset.search==='bank'){bankFilter.q=t.value;const scroll=window.scrollY;render();window.scrollTo(0,scroll);const inp=document.querySelector('[data-search="bank"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}}
 });
+/* toggle does not bubble, so capture it on the way down. */
+app.addEventListener('toggle',e=>{
+  const d=e.target; if(!d||!d.dataset||!d.dataset.panel)return;
+  d.open?openPanels.add(d.dataset.panel):openPanels.delete(d.dataset.panel);
+},true);
 app.addEventListener('change',e=>{const t=e.target;if(t.dataset.num){setDirect(t.dataset.ex,t.dataset.num,Number(t.dataset.index||0),t.value);render()}});
 
 window.addEventListener('beforeunload',e=>{
@@ -1375,6 +1453,7 @@ document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState==='hidden'){try{STORAGE.setItem(KEY,JSON.stringify(state))}catch(_){}if(Sync.configured()&&state.settings.autoSync&&state.settings.gistId)Sync.push('unload')}
   else if(document.visibilityState==='visible'&&view==='workout')holdWake(true);
 });
+window.addEventListener('resize',debounce(paintCharts,120));
 window.addEventListener('error',ev=>{if(!crashed){crashed=true;try{app.innerHTML=renderCrash(ev.message||'Unknown error')}catch(_){}}});
 
 /* Boot: render immediately from local, then pull cloud in the background. */
