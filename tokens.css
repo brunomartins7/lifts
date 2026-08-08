@@ -47,6 +47,32 @@
   --riskDim:rgba(224,133,133,.12);
   --risk-ink:#2A0E0E;               /* type on a solid red fill */
 
+  /* ---- composable triplets: every translucent scrim, glow and tint is built
+         from these, so an alpha variant can never drift from its base colour.
+         Use as rgba(var(--gold-rgb),.22). ---- */
+  --bg-top-rgb:13,16,22;
+  --bg-bot-rgb:8,9,13;
+  --bg2-rgb:15,18,24;
+  --panel2-rgb:27,31,41;
+  --panel3-rgb:35,41,54;
+  --gold-rgb:217,169,78;
+  --gold2-rgb:240,196,111;
+  --goldDim-rgb:87,67,31;
+  --ink-rgb:242,239,231;
+  --bg-rgb:11,13,18;
+  --panel-rgb:20,23,31;
+  --ok-rgb:127,207,155;
+  --risk-rgb:224,133,133;
+
+  /* ---- desktop-only surfaces: the sidebar and the wide hero have their own
+         gradients. Named here so the desktop layout cannot drift away from the
+         ramp the phone layout uses. ---- */
+  --sidebar-top:rgba(16,19,25,.98);
+  --sidebar-bot:rgba(9,11,15,.99);
+  --hero-desk-top:rgba(38,45,59,.62);
+  --hero-desk-bot:rgba(17,20,27,.97);
+  --scrim:rgba(5,7,10,.72);        /* modal overlay */
+
   /* ---- steel: the loading-barbell signature, the one non-gold material ---- */
   --steel:#8B94A5;
   --steel2:#525A69;

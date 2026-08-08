@@ -13,7 +13,7 @@
    longer describe a palette the app does not actually use. */
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;-webkit-font-smoothing:antialiased}
-body{background:radial-gradient(ellipse 60% 34% at 22% -6%,rgba(217,169,78,.13),transparent),radial-gradient(ellipse 42% 26% at 100% 4%,rgba(125,164,255,.06),transparent),linear-gradient(180deg,#0D1016,#090B0F)}
+body{background:radial-gradient(ellipse 60% 34% at 22% -6%,rgba(var(--gold-rgb),.13),transparent),radial-gradient(ellipse 42% 26% at 100% 4%,rgba(var(--ink-rgb),.035),transparent),linear-gradient(180deg,var(--bg-top),var(--bg-bot))}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 .wrap{max-width:660px;margin:0 auto;padding:26px 18px 80px}
 .eyebrow{font-size:10.5px;letter-spacing:1.9px;text-transform:uppercase;color:var(--gold2);font-weight:800}
@@ -24,14 +24,14 @@ h1 em{font-style:italic;color:var(--gold2)}
 .sec{margin:34px 0 12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;border-top:1px solid var(--line);padding-top:16px}
 .sec h2{margin:0;font-family:var(--disp);font-weight:600;font-style:italic;color:var(--ink2);font-size:17px}
 .sec .n{font-family:var(--mono);color:var(--faint);font-size:11px}
-.card{border:1px solid var(--line);border-radius:var(--r-lg);background:rgba(20,23,31,.92);padding:16px;box-shadow:0 14px 34px rgba(0,0,0,.14)}
+.card{border:1px solid var(--line);border-radius:var(--r-lg);background:rgba(var(--panel-rgb),.92);padding:16px;box-shadow:0 14px 34px rgba(0,0,0,.14)}
 .grid{display:grid;gap:12px}
 .g2{grid-template-columns:1fr 1fr}
 .note{color:var(--faint);font-size:12px;line-height:1.5;margin-top:8px}
 .b4a{color:var(--faint);font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;font-weight:800}
 
 /* palette */
-.sw{height:54px;border-radius:10px;border:1px solid var(--line);display:flex;align-items:flex-end;padding:7px;font-family:var(--mono);font-size:10px;color:#0b0d12;font-weight:700}
+.sw{height:54px;border-radius:10px;border:1px solid var(--line);display:flex;align-items:flex-end;padding:7px;font-family:var(--mono);font-size:10px;color:var(--bg);font-weight:700}
 .sw.d{color:var(--ink)}
 .swrow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .swlab{font-size:9.5px;color:var(--faint);margin-top:4px;font-family:var(--mono)}
@@ -52,7 +52,7 @@ h1 em{font-style:italic;color:var(--gold2)}
 .chart .area{fill:url(#ag)}
 .chart .line{fill:none;stroke:url(#lg);stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1000;stroke-dashoffset:1000;animation:draw 1.4s var(--e) forwards}
 .chart .fcast{fill:none;stroke:var(--gold2);stroke-width:2;stroke-dasharray:4 5;opacity:.75}
-.chart .fband{fill:rgba(217,169,78,.10)}
+.chart .fband{fill:rgba(var(--gold-rgb),.10)}
 .chart .goal{stroke:var(--gold2);stroke-dasharray:3 5;opacity:.5}
 .chart .grid{stroke:var(--gridline)}
 .chart .dot{fill:var(--gold2)}
@@ -77,21 +77,21 @@ h1 em{font-style:italic;color:var(--gold2)}
 .ring-t{font-family:var(--mono);font-weight:700;font-size:22px}
 
 /* first-run hero — empty as invitation */
-.firstrun{border:1px solid var(--goldDim);border-radius:var(--r-lg);background:linear-gradient(158deg,rgba(217,169,78,.14),rgba(20,23,31,.96));padding:24px 20px;text-align:center;position:relative;overflow:hidden}
-.firstrun:before{content:"";position:absolute;inset:-40% 60% auto -20%;height:220px;background:radial-gradient(circle,rgba(217,169,78,.18),transparent 70%)}
+.firstrun{border:1px solid var(--goldDim);border-radius:var(--r-lg);background:linear-gradient(158deg,rgba(var(--gold-rgb),.14),rgba(var(--panel-rgb),.96));padding:24px 20px;text-align:center;position:relative;overflow:hidden}
+.firstrun:before{content:"";position:absolute;inset:-40% 60% auto -20%;height:220px;background:radial-gradient(circle,rgba(var(--gold-rgb),.18),transparent 70%)}
 .firstrun h3{font-family:var(--disp);font-weight:600;font-size:24px;margin:12px 0 6px;position:relative}
 .firstrun p{color:var(--muted);font-size:13px;margin:0 auto;max-width:36ch;position:relative}
-.cta{display:inline-block;margin-top:16px;border-radius:var(--r-md);padding:13px 22px;background:linear-gradient(180deg,var(--gold2),var(--gold));color:#1A1206;font-weight:800;box-shadow:0 12px 26px rgba(217,169,78,.2);position:relative}
+.cta{display:inline-block;margin-top:16px;border-radius:var(--r-md);padding:13px 22px;background:linear-gradient(180deg,var(--gold2),var(--gold));color:var(--gold-ink);font-weight:800;box-shadow:0 12px 26px rgba(var(--gold-rgb),.2);position:relative}
 
 /* OVR count-up + radar draw */
 .ovr{font-family:var(--mono);font-size:58px;font-weight:700;letter-spacing:-2px;line-height:1;color:var(--gold2)}
-.radar polygon.cur{fill:rgba(217,169,78,.22);stroke:var(--gold2);stroke-width:2.5;transform-origin:center;transform:scale(.01);animation:grow 1s var(--e) .2s forwards}
+.radar polygon.cur{fill:rgba(var(--gold-rgb),.22);stroke:var(--gold2);stroke-width:2.5;transform-origin:center;transform:scale(.01);animation:grow 1s var(--e) .2s forwards}
 @keyframes grow{to{transform:scale(1)}}
 .radar text{fill:var(--muted);font-family:var(--body);font-weight:800;font-size:10px}
 
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .chip{border:1px solid currentColor;border-radius:999px;padding:6px 12px;font-size:11px;font-weight:800;letter-spacing:.4px}
-.mono{font-family:var(--mono)} .g{color:var(--ok)} .r{color:var(--risk)}
+.mono{font-family:var(--mono)} .up{color:var(--series)} .r{color:var(--risk)}
 .press{transition:transform .12s var(--e)} .press:active{transform:scale(.96)}
 .banner{border:1px solid var(--line);border-left:3px solid var(--gold);border-radius:var(--r-md);background:var(--panel);padding:13px 15px;font-size:12.5px;line-height:1.5;color:var(--ink2)}
 </style>
@@ -107,16 +107,25 @@ h1 em{font-style:italic;color:var(--gold2)}
   <div class="sec"><h2>Palette — formalised</h2><span class="n">token</span></div>
   <div class="card">
     <div class="swrow">
-      <div><div class="sw" style="background:#0B0D12;color:#F2EFE7">0B0D12</div><div class="swlab">--bg ink</div></div>
-      <div><div class="sw" style="background:#14171F;color:#F2EFE7">14171F</div><div class="swlab">--panel</div></div>
-      <div><div class="sw" style="background:#D9A94E">D9A94E</div><div class="swlab">--gold</div></div>
-      <div><div class="sw" style="background:#F0C46F">F0C46F</div><div class="swlab">--gold2</div></div>
-      <div><div class="sw" style="background:#7FCF9B">7FCF9B</div><div class="swlab">--pos</div></div>
-      <div><div class="sw" style="background:#E08585">E08585</div><div class="swlab">--neg</div></div>
-      <div><div class="sw" style="background:#7DA4FF">7DA4FF</div><div class="swlab">--info</div></div>
-      <div><div class="sw d" style="background:#232936">232936</div><div class="swlab">--panel3</div></div>
+      <div><div class="sw d" style="background:var(--bg)">--bg</div><div class="swlab">ink</div></div>
+      <div><div class="sw d" style="background:var(--panel)">--panel</div><div class="swlab">surface</div></div>
+      <div><div class="sw d" style="background:var(--panel3)">--panel3</div><div class="swlab">raised</div></div>
+      <div><div class="sw" style="background:var(--gold)">--gold</div><div class="swlab">accent</div></div>
     </div>
-    <p class="note">New: <b style="color:var(--ink2)">semantic tokens</b> (--pos / --neg / --warn / --info). Today colour meaning is injected inline in ~130 places via <code>scoreColor()</code>. Moving it to tokens is aesthetic <i>and</i> functional: one source of truth, consistent meaning, themeable.</p>
+    <div class="swrow" style="margin-top:10px">
+      <div><div class="sw" style="background:var(--m1)">--m1</div><div class="swlab">30+</div></div>
+      <div><div class="sw" style="background:var(--m2)">--m2</div><div class="swlab">45+</div></div>
+      <div><div class="sw" style="background:var(--m3)">--m3</div><div class="swlab">60+</div></div>
+      <div><div class="sw" style="background:var(--m4)">--m4</div><div class="swlab">75+</div></div>
+      <div><div class="sw" style="background:var(--m5)">--m5</div><div class="swlab">90+</div></div>
+    </div>
+    <div class="swrow" style="margin-top:10px">
+      <div><div class="sw" style="background:var(--series)">--series</div><div class="swlab">data</div></div>
+      <div><div class="sw" style="background:var(--series2)">--series2</div><div class="swlab">compare</div></div>
+      <div><div class="sw" style="background:var(--ok)">--ok</div><div class="swlab">done</div></div>
+      <div><div class="sw" style="background:var(--risk)">--risk</div><div class="swlab">risk</div></div>
+    </div>
+    <p class="note">Every swatch above is drawn from <code>tokens.css</code>, the file the app itself loads — this page cannot show a colour the product does not use. Colour carries one meaning each: <b style="color:var(--gold2)">gold is magnitude</b> (the <code>--m1…--m5</code> ramp behind <code>scoreColor()</code>, and <code>--series</code> for every chart), <b style="color:var(--ok)">green means nothing to act on</b> — a set logged, a load in range, a ledger synced — and <b style="color:var(--risk)">red means risk</b>. Blue is not part of the system.</p>
   </div>
 
   <div class="sec"><h2>Type scale</h2><span class="n">3 roles</span></div>
@@ -152,8 +161,8 @@ h1 em{font-style:italic;color:var(--gold2)}
   <div class="card">
     <svg class="chart" viewBox="0 0 340 150" aria-label="e1RM trend with forecast">
       <defs>
-        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#D9A94E"/><stop offset="1" stop-color="#F0C46F"/></linearGradient>
-        <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(217,169,78,.22)"/><stop offset="1" stop-color="rgba(217,169,78,0)"/></linearGradient>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--gold)"/><stop offset="1" stop-color="var(--gold2)"/></linearGradient>
+        <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(var(--gold-rgb),.22)"/><stop offset="1" stop-color="rgba(var(--gold-rgb),0)"/></linearGradient>
       </defs>
       <line class="grid" x1="24" y1="126" x2="316" y2="126"/>
       <line class="goal" x1="24" y1="34" x2="316" y2="34"/>
@@ -170,10 +179,10 @@ h1 em{font-style:italic;color:var(--gold2)}
   <div class="sec"><h2>Position card</h2><span class="n">fixes stat wrap</span></div>
   <div class="grid g2">
     <div class="pos press">
-      <div class="pos-h"><div class="pos-name">Barbell Bench Press</div><div class="rating" style="color:var(--ok)">BUY</div></div>
+      <div class="pos-h"><div class="pos-name">Barbell Bench Press</div><div class="rating" style="color:var(--series)">BUY</div></div>
       <div class="stats">
         <div class="stat"><div class="v">96.0</div><div class="k">e1RM</div></div>
-        <div class="stat"><div class="v g">+2.9%</div><div class="k">ret/wk</div></div>
+        <div class="stat"><div class="v up">+2.9%</div><div class="k">ret/wk</div></div>
         <div class="stat"><div class="v">1.22</div><div class="k">consist</div></div>
         <div class="stat"><div class="v">0.0%</div><div class="k">draw</div></div>
       </div>
@@ -221,16 +230,16 @@ h1 em{font-style:italic;color:var(--gold2)}
     <div class="card">
       <div class="b4a">Rating &amp; return colours</div>
       <div class="chips">
-        <span class="chip" style="color:var(--ok)">BUY</span>
-        <span class="chip" style="color:var(--gold2)">HOLD</span>
+        <span class="chip" style="color:var(--series)">BUY</span>
+        <span class="chip" style="color:var(--ok)">HOLD</span>
         <span class="chip" style="color:var(--series2)">SWAP</span>
         <span class="chip" style="color:var(--risk)">REDUCE</span>
       </div>
       <div class="chips" style="margin-top:12px">
-        <span class="chip g" style="border-color:var(--ok)">+2.9%/wk</span>
+        <span class="chip" style="color:var(--series);border-color:var(--series)">+2.9%/wk</span>
         <span class="chip r" style="border-color:var(--risk)">−6.5% draw</span>
       </div>
-      <div class="note">Green = progress, red = regression, amber = hold, blue = act. Fixed meaning everywhere — no colour doing two jobs.</div>
+      <div class="note">Gold = magnitude, so every quantity and every chart series is gold. Green = nothing to act on (a set logged, a load in range, a HOLD rating). Red = risk. Blue is not part of the system. No colour does two jobs.</div>
       <div class="b4a" style="margin-top:14px">Press feedback</div>
       <div class="chips"><span class="cta press" style="margin:0">Tap me</span></div>
     </div>
