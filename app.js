@@ -268,12 +268,21 @@ function loadState(){
 
 const pushSoon = debounce(()=>Sync.push('auto'), 20000);
 function save(){
-  try{
-    state.settings.updatedAt = now();
-    STORAGE.setItem(KEY, JSON.stringify(state));
-  }catch(_){/* quota — snapshots pruned below will free space next pass */}
+  state.settings.updatedAt = now();
+  saveFailed = !writeMain(JSON.stringify(state));
   IDB.mirror(state);
   if (state.settings.autoSync && state.settings.gistToken && state.settings.gistId) pushSoon();
+}
+/* The live ledger outranks every snapshot. If the main write is rejected, drop
+   snapshots oldest-first and retry until it fits; only report failure once
+   nothing is left to free, so the health banner can say so out loud. */
+function writeMain(json){
+  try{ STORAGE.setItem(KEY, json); return true; }catch(_){}
+  const snaps = STORAGE.keys().filter(k=>k.startsWith(SNAP_PREFIX)).sort();
+  for(const k of snaps){
+    try{ STORAGE.removeItem(k); STORAGE.setItem(KEY, json); return true; }catch(_){}
+  }
+  return false;
 }
 function markDataChanged(){ state.settings.lastDataChangeAt = new Date().toISOString(); }
 
@@ -323,6 +332,53 @@ const IDB = (()=>{
     read(){ return new Promise(res=>{ try{ if(!db)return res(null); const r=db.transaction('kv').objectStore('kv').get('state'); r.onsuccess=()=>res(r.result?JSON.parse(r.result):null); r.onerror=()=>res(null);}catch(_){res(null)} }); }
   };
 })();
+
+/* ---- Durability: the three ways this ledger used to disappear ----
+   1. iOS Safari evicts script-writable storage after 7 idle days unless the
+      origin holds a persistence grant, which Safari only issues to a
+      home-screen web app. That is the "it reset itself again this week" bug.
+   2. Private browsing makes localStorage throw, so STORAGE silently falls back
+      to an in-memory object that dies with the tab: reset on every close.
+   3. A quota rejection in save() used to be swallowed, so every later write was
+      dropped and the next load returned the last payload that still fit.
+   Each is handled below, and none of them is allowed to fail quietly again. */
+let persistGranted = null;                 // null = unknown, true/false = answered
+let saveFailed = false;                    // last main write rejected (quota)
+async function requestPersistence(){
+  try{
+    if(!navigator.storage || !navigator.storage.persist) return;
+    persistGranted = await navigator.storage.persisted();
+    if(!persistGranted) persistGranted = await navigator.storage.persist();
+  }catch(_){ persistGranted = null; }
+}
+
+/* Recovery link — #k=<base64 gistId:token>. The home-screen shortcut keeps the
+   URL it was created with, so the credentials survive a storage wipe that the
+   ledger itself does not. Boot then pulls the ledger straight back. The hash is
+   stripped from the address bar immediately so the token is never left on screen. */
+function recoveryLink(){
+  const {gistId,gistToken} = state.settings;
+  if(!gistId||!gistToken) return '';
+  try{ return `${location.origin}${location.pathname}#k=${btoa(`${gistId}:${gistToken}`)}`; }
+  catch(_){ return ''; }
+}
+function adoptRecoveryLink(){
+  const m = /[#&]k=([A-Za-z0-9+/=]+)/.exec(location.hash||'');
+  if(!m) return false;
+  let adopted = false;
+  try{
+    const [gistId,token] = atob(m[1]).split(':');
+    if(gistId && token && (state.settings.gistId!==gistId || state.settings.gistToken!==token)){
+      state.settings.gistId = gistId;
+      state.settings.gistToken = token;
+      state.settings.autoSync = true;
+      save();
+      adopted = true;
+    }
+  }catch(_){}
+  try{ history.replaceState(null,'',location.pathname+location.search); }catch(_){}
+  return adopted;
+}
 
 /* ========================== 4. DOMAIN (scoring preserved verbatim) ======== */
 function bodyweight(){return clamp(Number(state.settings.bodyweight||75),35,180)}
@@ -958,6 +1014,8 @@ function resetAll(){confirmBox={title:'Reset all local data?',text:'This clears 
 function storageHealth(){
   const proto=location.protocol, host=location.hostname;
   if(!STORAGE.ok)return{level:'bad',msg:'This browser is blocking storage. Data lives only in memory for this tab. Set up cloud sync or export before closing.'};
+  if(saveFailed)return{level:'bad',msg:'The last save was rejected — this device is out of storage. Export now, then delete old snapshots in this screen.'};
+  if(persistGranted===false)return{level:'warn',msg:'This browser has not granted persistent storage, so it may clear your ledger after about a week idle. Add the app to your home screen and set up cloud sync — both are in this screen.'};
   if(proto==='file:')return{level:'warn',msg:'Running from a local file. Some phones clear file-based storage. Use one stable hosted URL (see the guide in Data) and set up cloud sync.'};
   if(/netlify\.app$/.test(host)&&(state.sessions||[]).length===0)return{level:'warn',msg:'Every new Netlify Drop upload is a brand-new site with empty storage. Deploy once to a stable URL and keep using that link.'};
   return{level:'ok',msg:''};
@@ -1264,6 +1322,7 @@ function renderData(){
   const last=state.settings.lastExportAt?new Date(state.settings.lastExportAt).toLocaleDateString():'Never';
   const snaps=listSnapshots();
   const conf=Boolean(state.settings.gistToken&&state.settings.gistId);
+  const link=recoveryLink();
   return `<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('data')}
   <section class="hero"><div class="eyebrow">Data center</div><div class="title">One ledger, every device</div><div class="sub">Cloud sync keeps phone and laptop identical. Snapshots and exports protect against everything else.</div></section>
   ${renderRecoveryBanner()}${renderHealthBanner()}
@@ -1273,6 +1332,12 @@ function renderData(){
     <div class="field" style="margin-top:10px"><label>Gist ID</label><input data-sync-field="gistId" value="${esc(state.settings.gistId||'')}" placeholder="Leave blank to create a new private gist"></div>
     <div class="session-actions" style="margin-top:12px"><button class="secondary gold" data-action="gist-save">Save to cloud</button><button class="secondary" data-action="gist-load">Load from cloud</button><button class="secondary" data-action="toggle-autosync">${state.settings.autoSync?'Pause auto-sync':'Enable auto-sync'}</button></div>
     <div class="small faint" style="margin-top:10px">The token stays on this device only — it is never included in the cloud file or in exports.</div>
+  </div>
+  <div class="card"><div class="row" style="padding-top:0"><div><strong>Durability</strong><div class="small faint">Whether this browser is allowed to keep your ledger between visits.</div></div><div class="pill">${persistGranted===true?'Persistent':persistGranted===false?'At risk':'Checking'}</div></div>
+    <div class="row"><span>Eviction protection</span><strong>${persistGranted===true?'Granted':persistGranted===false?'Not granted':'Unknown'}</strong></div>
+    <div class="row"><span>Local writes</span><strong>${STORAGE.ok?(saveFailed?'Failing — out of space':'Working'):'Blocked by browser'}</strong></div>
+    ${persistGranted===true?'':`<ol class="feedback-list"><li>Open this page in Safari, press Share, then Add to Home Screen. A home-screen app is the only kind iOS exempts from clearing storage after a week.</li><li>Open the app from that icon from now on, not from a Safari tab.</li></ol>`}
+    ${link?`<div class="field" style="margin-top:10px"><label>Recovery link — bookmark this, it restores everything</label><input readonly value="${esc(link)}" onfocus="this.select()"></div><div class="session-actions" style="margin-top:10px"><button class="secondary gold" data-action="copy-link">Copy recovery link</button></div><div class="small faint" style="margin-top:9px">This link carries your cloud credentials. Add the app to your home screen using it and the ledger rebuilds itself even if the phone wipes local storage. Keep it private — anyone holding it can read and write your gists.</div>`:'<div class="small faint" style="margin-top:10px">Set up cloud sync above to generate a recovery link.</div>'}
   </div>
   <div class="card ${unsaved?'backup-warn':'backup-ok'}"><div class="row" style="padding-top:0"><div><strong>${unsaved?'Backup recommended':'Backups clear'}</strong><div class="small faint">Last export: ${esc(last)}.</div></div><div class="pill">${unsaved?'Unsaved':'Safe'}</div></div><div class="session-actions"><button class="secondary gold" data-action="export">Export JSON</button><button class="secondary" data-action="export-csv">Export CSV</button><button class="secondary" data-action="import">Import JSON</button></div></div>
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Snapshots</strong><div class="small faint">Automatic local restore points — one per training day plus pre-import, pre-reset and pre-restore.</div></div><button class="secondary" data-action="snap-now">Snapshot now</button></div>${snaps.length?snaps.map(s=>`<div class="row"><div><strong>${esc(s.label)}</strong><div class="small faint">${s.sessions} sessions · ${relTime(s.at)}</div></div><button class="secondary" data-action="snap-restore" data-key="${esc(s.key)}">Restore</button></div>`).join(''):'<div class="small faint">No snapshots yet. One is taken automatically after every finished session.</div>'}</div>
@@ -1427,6 +1492,7 @@ app.addEventListener('click',e=>{
   else if(a==='toggle-autosync'){state.settings.autoSync=!state.settings.autoSync;save();render()}
   else if(a==='toggle-autorest'){state.settings.autoRest=!state.settings.autoRest;save();render()}
   else if(a==='toggle-sound'){state.settings.soundOn=!state.settings.soundOn;save();render()}
+  else if(a==='copy-link'){const l=recoveryLink();if(!l){flash('Set up cloud sync first.');}else{try{navigator.clipboard.writeText(l).then(()=>flash('Recovery link copied. Keep it private.'),()=>flash('Copy failed — long-press the field above instead.'))}catch(_){flash('Copy failed — long-press the field above instead.')}}}
   else if(a==='snap-now'){snapshot();render();flash('Snapshot saved.')}
   else if(a==='snap-restore'){const key=t.dataset.key;confirmBox={title:'Restore this snapshot?',text:'Current data is snapshotted first as pre-restore, then replaced by the selected snapshot.',ok:'Restore snapshot',danger:false,onYes:()=>{confirmBox=null;restoreSnapshot(key)}};render()}
   else if(a==='crash-export'){try{download(`brunian-lifts-raw-${today()}.json`,STORAGE.getItem(KEY)||STORAGE.getItem(QUARANTINE_KEY)||JSON.stringify(state),'application/json')}catch(_){}}
@@ -1462,9 +1528,12 @@ document.addEventListener('visibilitychange',()=>{
 window.addEventListener('resize',debounce(paintCharts,120));
 window.addEventListener('error',ev=>{if(!crashed){crashed=true;try{app.innerHTML=renderCrash(ev.message||'Unknown error')}catch(_){}}});
 
-/* Boot: render immediately from local, then pull cloud in the background. */
+/* Boot: adopt any recovery link first so a wiped device knows where its ledger
+   lives, render immediately from local, then pull cloud in the background. */
+adoptRecoveryLink();
 render();
 snapshot();
+requestPersistence().then(()=>{ if(persistGranted===false) render(); });
 if(state.settings.autoSync&&state.settings.gistToken&&state.settings.gistId){
   Sync.pull('boot').then(changed=>{if(changed){openDay=state.session?state.session.dayIndex:state.currentDayIndex;render()}});
 }
