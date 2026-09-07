@@ -9,7 +9,7 @@
      "replace the file in the repo, same URL" update workflow still works;
      cache is only used as the offline fallback.
    ========================================================================== */
-const CACHE = 'brunian-lifts-shell-v8';
+const CACHE = 'brunian-lifts-shell-v9';
 /* CORE is atomic: if any of it fails to cache, the worker must not install,
    because a half-cached shell serves an app with no styles. Icons and the
    manifest are cosmetic, so they stay best-effort. */
@@ -44,7 +44,7 @@ self.addEventListener('fetch', e => {
   if (url.origin !== location.origin) return;        // GIFs + api.github.com go straight to network
   e.respondWith((async () => {
     try {
-      const res = await fetch(req);                  // network-first: keeps the push-to-update workflow
+      const res = await fetch(req, {cache:'no-cache'}); // revalidate: a bare fetch() can still be answered from the HTTP cache
       // Await the write, but never let it sink the response. e.waitUntil() here
       // would fire after the fetch event went inactive (InvalidStateError), and
       // an unguarded await would let a quota rejection discard a good response

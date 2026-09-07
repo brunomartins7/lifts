@@ -288,6 +288,10 @@
     .alt-copy{display:grid;gap:3px;min-width:0}
     .alt-name{font-weight:800;font-size:12.5px;line-height:1.3;color:var(--ink)}
     .alt-meta{font-size:11px;color:var(--muted);text-transform:capitalize}
+    /* ---- coached program chooser ---- */
+    .preset{margin-top:10px;border:1px solid var(--line)}
+    .preset.is-on{border-color:var(--goldDim);background:var(--goldGhost)}
+    .pill.gold{background:var(--goldGhost);color:var(--gold2);border-color:var(--goldDim);padding:2px 8px;font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;font-family:inherit;font-weight:800;min-width:0;vertical-align:2px}
     .notes{min-height:84px;margin-top:4px;resize:vertical}
     .restbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:90;width:min(92vw,560px);display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--goldDim);border-radius:var(--r-md);background:rgba(var(--panel-rgb),.97);box-shadow:0 20px 46px var(--shadow);padding:11px 14px;backdrop-filter:blur(10px)}
     .resttime{font-size:24px;font-weight:700;line-height:1;margin-top:2px}
