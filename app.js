@@ -87,6 +87,15 @@ const BANK=[{"id":"barbell-bench-press","name":"Barbell Bench Press","clip":"pec
 {"id":"sled-calf-press","name":"Calf Press On Leg Press","clip":"calves/sled-calf-press-on-leg-press.gif","muscle":"calves","equipment":"machine","type":"isolation","min":12,"max":20,"inc":5,"startWeight":60,"goalWeight":120},
 {"id":"bodyweight-calf-raise","name":"Bodyweight Calf Raise","clip":"calves/bodyweight-standing-calf-raise.gif","muscle":"calves","equipment":"bodyweight","type":"isolation","min":15,"max":25,"inc":1,"startWeight":0,"goalWeight":0,"scoreMode":"reps"}];
 
+/* Coaching content, keyed by bank id. Anything absent falls back to the short
+   cue list on the exercise itself, so a missing entry degrades rather than
+   breaks. Populated in COACHING_DATA below. */
+const COACHING = {};
+
+/* Curated same-stimulus alternatives, keyed by bank id. When an id is missing,
+   alternativesFor() derives a set from the bank instead. */
+const ALTERNATIVES = {};
+
 const MUSCLES = ['chest','back','shoulders','biceps','triceps','forearms','core','quads','hamstrings','glutes','calves'];
 const LEG_MUSCLES = ['quads','hamstrings','glutes','calves'];
 const MUSCLE_LABEL = {chest:'Chest',back:'Back',shoulders:'Delts',biceps:'Biceps',triceps:'Triceps',forearms:'Forearms',core:'Core',quads:'Quads',hamstrings:'Hams',glutes:'Glutes',calves:'Calves'};
@@ -478,6 +487,64 @@ function targetFromLast(ex,last){
   if(allTop&&ex.scoreMode!=='reps'){weight=Number((weight+Number(ex.inc||2.5)).toFixed(1));reps=Array.from({length:Number(ex.sets)||3},()=>ex.min)}
   else{const i=reps.findIndex(r=>r<ex.max);if(i>=0)reps[i]=Math.min(ex.max,reps[i]+1);else reps[reps.length-1]=Math.min(ex.max,reps[reps.length-1]+1)}
   return{weight,reps};
+}
+/* Three interchangeable options for a slot: same primary muscle and same joint
+   action, spread across equipment so a busy rack never costs a session. Curated
+   lists win; otherwise take the best bank match per distinct equipment type. */
+/* "Same muscle" is not the same stimulus: a reverse curl and a wrist curl are
+   both isolation work tagged forearms, but one is elbow flexion and the other is
+   wrist flexion. Matching on the movement pattern is what keeps a swap honest. */
+const PATTERNS = [
+  ['wrist-curl',       /wrist-curl|finger-curl|wrist-roller/],
+  ['reverse-curl',     /reverse-curl|zottman/],
+  ['curl',             /curl/],
+  ['pushdown',         /pushdown|kickback/],
+  ['overhead-ext',     /overhead-triceps|french-press|triceps-extension|skull-crusher/],
+  ['dip',              /dip|close-grip-bench/],
+  ['incline-press',    /incline.*(press)|incline-bench/],
+  ['horizontal-press', /bench-press|chest-press|push-up|lever-chest/],
+  ['overhead-press',   /military-press|overhead-press|shoulder-press|arnold|push-press/],
+  ['rear-delt',        /rear-delt|revers\w*-fly|face-pull|rear-lateral/],
+  ['fly',              /fly|crossover|pec-deck|pullover/],
+  ['lateral-raise',    /lateral-raise|front-raise|upright-row/],
+  ['row',              /row/],
+  ['pulldown',         /pulldown|pull-up|chin-up/],
+  ['shrug',            /shrug/],
+  ['hinge',            /deadlift|romanian|good-morning|glute-bridge|pull-through|hip-thrust/],
+  ['leg-curl',         /leg-curl/],
+  ['leg-extension',    /leg-extension/],
+  ['squat',            /squat|leg-press|lunge|step-up|hack/],
+  ['calf',             /calf/],
+  ['crunch',           /crunch|russian-twist|dead-bug|air-bike|roll(er)?out/],
+  ['leg-raise',        /leg-raise|knee-raise/]
+];
+function patternOf(ex){
+  const s=`${ex.id||''} ${ex.clip||''}`.toLowerCase();
+  for(const [name,re] of PATTERNS) if(re.test(s)) return name;
+  return '';
+}
+/* Three interchangeable options for a slot: same primary muscle and the same
+   joint action, spread across equipment so a busy rack never costs a session.
+   Curated lists win; otherwise derive from the bank on muscle plus pattern. */
+function alternativesFor(ex){
+  const curated=(ALTERNATIVES[ex.id]||[]).map(id=>BANK.find(b=>b.id===id)).filter(Boolean);
+  if(curated.length) return curated.slice(0,3);
+  const pat=patternOf(ex);
+  const same=b=>b.id!==ex.id
+    && b.clip!==ex.clip                       // the same movement under another id
+    && b.muscle===ex.muscle
+    && (pat?patternOf(b)===pat:b.type===ex.type);
+  const out=[], seen=new Set([ex.equipment]);
+  for(const b of BANK){ if(!same(b)||seen.has(b.equipment)) continue; seen.add(b.equipment); out.push(b); if(out.length===3) break; }
+  for(const b of BANK){ if(out.length===3) break; if(!same(b)||out.some(x=>x.id===b.id)) continue; out.push(b); }
+  return out;
+}
+
+/* The load he should use on a movement he has never performed, shown before he
+   commits to the swap. */
+function altPreview(b,sets){
+  const t=muscleBasedTarget({...b,sets:sets||3,startReps:b.min,goalReps:b.max});
+  return t.scoreMode==='reps'||b.scoreMode==='reps'?`${t.reps[0]} reps`:fmtKg(t.weight);
 }
 function targetImpact(ex){const current=computeProfile().overall;const latest=currentEntries();latest[ex.id]=targetEntry(ex);const next=profileFromEntries(latest).overall;return Math.round((next-current)*10)/10}
 function nextScoreAdvice(){const prof=computeProfile();const base=prof.overall;const candidates=allExercises().map(ex=>{const t=targetEntry(ex);const e=currentEntries();e[ex.id]=t;const next=profileFromEntries(e).overall;return{ex,t,delta:next-base,score:scoreFromEntry(ex,latestEntryFor(ex))}}).sort((a,b)=>b.delta-a.delta||a.score-b.score);return candidates.slice(0,3).map(c=>`${c.ex.name}: move toward ${fmtKg(c.t.weight)} · ${c.t.reps.join(', ')}. Estimated score impact: +${Math.max(.1,Math.round(c.delta*10)/10)} OVR.`)}
@@ -1171,6 +1238,31 @@ function renderWorkout(){
 }
 function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div><button class="round-btn" data-action="round">Round done</button></div>${g.exercises.map(base=>({base,ex:sessionExercise(base)})).filter(x=>!state.session?.removedExercises?.includes(x.ex.id)).map(x=>renderExercise(x.ex,dayIndex,g.id,x.base.id)).join('')}</section>`}
 function renderMedia(ex){return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
+/* The coaching layer. Four blocks in the order you need them at the rack: set
+   up, perform, what actually drives growth, and the mistake to avoid. Falls back
+   to the exercise's own cue list when no coaching entry exists. */
+function renderTechnique(ex){
+  const c=COACHING[ex.id];
+  if(!c) return renderMedia(ex)+((ex.cues||[]).length?`<div class="cues"><ul>${(ex.cues||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'<div class="small faint">No written guide for this movement yet — follow the demo above.</div>');
+  const bl=(title,items,cls)=>items&&items.length?`<div class="coach-block ${cls}"><div class="coach-h">${title}</div><ul>${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'';
+  return renderMedia(ex)
+    +`<div class="coach">${bl('Set up',c.setup,'')}${bl('Perform the rep',c.execute,'')}${bl('What drives growth',c.grow,'grow')}${bl('Common mistakes',c.mistakes,'warn')}</div>`;
+}
+/* Three same-stimulus options, each with the load he should start on, swapped
+   for today only through the existing session-swap path. */
+function renderAlternatives(ex,groupId,baseId){
+  const alts=alternativesFor(ex);
+  if(!alts.length) return '<div class="small faint">No close match in the bank for this movement.</div>';
+  const active=new Set(sessionExercises().map(x=>x.id));
+  return `<div class="small muted" style="margin-bottom:9px">Same muscle, same joint action. Swapping keeps your score — the load below is estimated from your own training.</div>
+  <div class="alt-list">${alts.map(b=>{
+    const taken=active.has(b.id);
+    return `<button class="alt-card" data-action="alt-pick" data-alt="${esc(b.id)}" data-group="${esc(groupId)}" data-base="${esc(baseId)}" ${taken?'disabled':''}>
+      <span class="alt-media"><img src="${CLIP_BASE+esc(b.clip)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>
+      <span class="alt-copy"><span class="alt-name">${esc(b.name)}</span><span class="alt-meta">${esc(b.equipment)} · ${b.min}–${b.max} reps · ${taken?'already in today':'start '+esc(altPreview(b,ex.sets))}</span></span>
+    </button>`;
+  }).join('')}</div>`;
+}
 function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   const d=state.session?.draft?.[ex.id]||targetEntry(ex),done=state.session?.setDone?.[ex.id]||[],last=latestEntryFor(ex),target=targetEntry(ex),score=scoreFromEntry(ex,last),earned=(d.reps||[]).every(r=>r>=ex.max),weakR=Math.min(...(d.reps||[ex.min])),fill=clamp((weakR-ex.min)/Math.max(1,ex.max-ex.min),0,1),warmups=Array.isArray(d.warmups)?d.warmups:[];
   const plates=ex.equipment==='barbell'&&Number(d.weight)>Number(state.settings.barWeight||20)?plateFor(d.weight):null;
@@ -1185,7 +1277,8 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,last.reps?.[i]??last.reps?.[0]??ex.min,Boolean(done[i]))).join('')}</div>
   ${panel(ex.id+':adjust','Adjust',`<div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">Add set</button><button class="mini-btn" data-action="remove-set" data-ex="${ex.id}">Remove set</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">Add warmup</button>${warmups.length?`<button class="mini-btn" data-action="remove-warmup" data-ex="${ex.id}">Remove warmup</button>`:''}<button class="mini-btn gold" data-action="session-swap" data-group="${groupId}" data-base="${baseId}">Swap similar</button><button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button></div>`)}
-  ${panel(ex.id+':demo','Demo and cues',renderMedia(ex)+((ex.cues||[]).length?`<div class="cues"><ul>${(ex.cues||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''))}
+  ${panel(ex.id+':tech','How to do this properly',renderTechnique(ex))}
+  ${panel(ex.id+':alts','Swap this exercise',renderAlternatives(ex,groupId,baseId))}
   </article>`;
 }
 /* Collapsible section. Native <details> does the work; the open set survives
@@ -1459,6 +1552,7 @@ app.addEventListener('click',e=>{
   else if(a==='add-warmup')addWarmup(t.dataset.ex);
   else if(a==='remove-warmup')removeWarmup(t.dataset.ex);
   else if(a==='session-swap')openSessionSwap(t.dataset.group,t.dataset.base);
+  else if(a==='alt-pick'){bankTarget={dayIndex:state.session?.dayIndex,groupId:t.dataset.group,replaceId:t.dataset.base,sessionOnly:true};chooseFromBank(t.dataset.alt)}
   else if(a==='session-remove')removeSessionExercise(t.dataset.ex);
   else if(a==='calendar-prev'){calendarOffset--;render()}
   else if(a==='calendar-next'){calendarOffset=Math.min(0,calendarOffset+1);render()}

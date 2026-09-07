@@ -263,6 +263,31 @@
     @media (hover:hover){.ex-panel>summary:hover{color:var(--ink2)}}
     .cues{margin-top:12px;color:var(--muted);font-size:12px;line-height:1.55}
     .cues ul{margin:6px 0 0;padding-left:17px}
+    /* ---- coaching layer: how to do the movement, and what makes it grow ---- */
+    .coach{margin-top:13px;display:grid;gap:1px;background:var(--soft);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
+    .coach-block{background:var(--panel);padding:11px 12px 12px}
+    .coach-h{font-size:10px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800;color:var(--faint);margin-bottom:6px}
+    .coach-block ul{margin:0;padding-left:16px;color:var(--ink2);font-size:12.5px;line-height:1.62}
+    .coach-block li+li{margin-top:5px}
+    .coach-block li::marker{color:var(--faint)}
+    .coach-block.grow{background:var(--goldGhost);box-shadow:inset 2px 0 0 var(--gold)}
+    .coach-block.grow .coach-h{color:var(--gold2)}
+    .coach-block.grow ul{color:var(--ink)}
+    .coach-block.grow li::marker{color:var(--gold)}
+    .coach-block.warn{box-shadow:inset 2px 0 0 var(--risk)}
+    .coach-block.warn .coach-h{color:var(--risk)}
+    .coach-block.warn li::marker{color:var(--risk)}
+    /* ---- same-stimulus alternatives ---- */
+    .alt-list{display:grid;gap:8px}
+    .alt-card{display:grid;grid-template-columns:64px 1fr;gap:11px;align-items:center;text-align:left;width:100%;padding:8px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);transition:border-color .15s var(--e),background .15s var(--e)}
+    .alt-card[disabled]{opacity:.42}
+    @media (hover:hover){.alt-card:not([disabled]):hover{border-color:var(--goldDim);background:var(--panel2)}}
+    .alt-card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+    .alt-media{display:block;height:52px;border-radius:8px;overflow:hidden;background:var(--media-bg);border:1px solid var(--line)}
+    .alt-media img{display:block;width:100%;height:100%;object-fit:contain;filter:invert(1) hue-rotate(180deg) contrast(1.04);mix-blend-mode:screen}
+    .alt-copy{display:grid;gap:3px;min-width:0}
+    .alt-name{font-weight:800;font-size:12.5px;line-height:1.3;color:var(--ink)}
+    .alt-meta{font-size:11px;color:var(--muted);text-transform:capitalize}
     .notes{min-height:84px;margin-top:4px;resize:vertical}
     .restbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom));z-index:90;width:min(92vw,560px);display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid var(--goldDim);border-radius:var(--r-md);background:rgba(var(--panel-rgb),.97);box-shadow:0 20px 46px var(--shadow);padding:11px 14px;backdrop-filter:blur(10px)}
     .resttime{font-size:24px;font-weight:700;line-height:1;margin-top:2px}
