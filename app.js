@@ -262,7 +262,7 @@ function migrate(raw){
     n.sessions = n.sessionsLog.map(s=>({id:s.id||uid(),date:s.date||today(),timestamp:s.timestamp||now(),day:s.day||'A',dayIndex:s.dayIndex||0,durationMin:s.durationMin||0,note:s.note||'',grade:s.grade||'BASE',overall:s.overall||null,entries:s.entries||{},prs:s.prs||[]}));
   }
   delete n.sessionsLog; delete n.roundDone;
-  delete n.__recoveredFrom; delete n.__quarantined;   // transient flags — set per-load by loadState, never persisted
+  delete n.__recoveredFrom; delete n.__quarantined; delete n.__fresh;   // transient flags — set per-load by loadState, never persisted
   n.sessions = n.sessions.filter(s=>s&&s.entries).map(s=>normalizeSession(s,n));
   n.currentDayIndex = Number.isInteger(n.currentDayIndex)?clamp(n.currentDayIndex,0,n.program.length-1):0;
   if (n.session && n.session.dayIndex==null) n.session=null;
@@ -275,7 +275,7 @@ function loadState(){
   let raw = null, srcKey = null;
   try {
     for (const k of [KEY,...LEGACY]){ const v=STORAGE.getItem(k); if(v){raw=v;srcKey=k;break;} }
-    if (!raw){ const st=freshState(); indexExercises(st); return st; }
+    if (!raw){ const st=freshState(); indexExercises(st); st.__fresh=true; return st; }
     return migrate(JSON.parse(raw));
   } catch(err){
     // NEVER silently wipe. Quarantine the unreadable payload, then try snapshots.
@@ -293,14 +293,27 @@ function save(){
   IDB.mirror(state);
   if (state.settings.autoSync && state.settings.gistToken && state.settings.gistId) pushSoon();
 }
-/* The live ledger outranks every snapshot. If the main write is rejected, drop
-   snapshots oldest-first and retry until it fits; only report failure once
-   nothing is left to free, so the health banner can say so out loud. */
+/* The live ledger outranks a snapshot, but not the last one. Free space only for
+   a genuine quota rejection, oldest first by the timestamp inside each snapshot
+   rather than by key order, and stop while one restore point still stands —
+   spending the final backup during a storage failure is how a bad day becomes an
+   unrecoverable one. */
+function isQuotaError(e){
+  return Boolean(e) && (e.name==='QuotaExceededError' || e.name==='NS_ERROR_DOM_QUOTA_REACHED' || e.code===22 || e.code===1014);
+}
+function snapshotsOldestFirst(){
+  return STORAGE.keys().filter(k=>k.startsWith(SNAP_PREFIX))
+    .map(k=>{let at=0;try{at=JSON.parse(STORAGE.getItem(k)).at||0}catch(_){}return{k,at}})
+    .sort((a,b)=>a.at-b.at);
+}
 function writeMain(json){
-  try{ STORAGE.setItem(KEY, json); return true; }catch(_){}
-  const snaps = STORAGE.keys().filter(k=>k.startsWith(SNAP_PREFIX)).sort();
-  for(const k of snaps){
-    try{ STORAGE.removeItem(k); STORAGE.setItem(KEY, json); return true; }catch(_){}
+  try{ STORAGE.setItem(KEY, json); return true; }
+  catch(err){ if(!isQuotaError(err)) return false; }
+  const snaps = snapshotsOldestFirst();
+  while(snaps.length > 1){                       // never drop below one restore point
+    STORAGE.removeItem(snaps.shift().k);
+    try{ STORAGE.setItem(KEY, json); return true; }
+    catch(err){ if(!isQuotaError(err)) return false; }
   }
   return false;
 }
@@ -340,16 +353,30 @@ function restoreSnapshot(key){
 }
 
 /* IndexedDB mirror — second copy that survives some localStorage clearing. */
-const IDB = (()=>{ 
+const IDB = (()=>{
   let db=null;
-  try{
-    const req = indexedDB.open('brunian-lifts',1);
-    req.onupgradeneeded = e=>e.target.result.createObjectStore('kv');
-    req.onsuccess = e=>{ db=e.target.result; };
-  }catch(_){}
+  /* indexedDB.open() is asynchronous. Both methods used to test `db` immediately,
+     so every call before the open resolved silently did nothing — the early
+     saves never mirrored, and a boot-time read always saw null. That is why this
+     second copy has never once been used to recover anything. Both now wait. */
+  const ready = new Promise(res=>{
+    try{
+      const req = indexedDB.open('brunian-lifts',1);
+      req.onupgradeneeded = e=>e.target.result.createObjectStore('kv');
+      req.onsuccess = e=>{ db=e.target.result; res(); };
+      req.onerror = ()=>res();
+    }catch(_){ res(); }
+  });
   return {
-    mirror(st){ try{ if(!db)return; db.transaction('kv','readwrite').objectStore('kv').put(JSON.stringify(st),'state'); }catch(_){} },
-    read(){ return new Promise(res=>{ try{ if(!db)return res(null); const r=db.transaction('kv').objectStore('kv').get('state'); r.onsuccess=()=>res(r.result?JSON.parse(r.result):null); r.onerror=()=>res(null);}catch(_){res(null)} }); }
+    mirror(st){ ready.then(()=>{ try{ if(!db)return; db.transaction('kv','readwrite').objectStore('kv').put(JSON.stringify(st),'state'); }catch(_){} }); },
+    read(){ return ready.then(()=>new Promise(res=>{
+      try{
+        if(!db) return res(null);
+        const r=db.transaction('kv').objectStore('kv').get('state');
+        r.onsuccess=()=>{ try{ res(r.result?JSON.parse(r.result):null); }catch(_){ res(null); } };
+        r.onerror=()=>res(null);
+      }catch(_){ res(null); }
+    })); }
   };
 })();
 
@@ -369,7 +396,10 @@ async function requestPersistence(){
     if(!navigator.storage || !navigator.storage.persist) return;
     persistGranted = await navigator.storage.persisted();
     if(!persistGranted) persistGranted = await navigator.storage.persist();
-  }catch(_){ persistGranted = null; }
+  }catch(_){ persistGranted = false; }
+  /* An unanswered question is not a yes. A browser with no Storage API gets no
+     eviction protection either, so it belongs in the warning, not in limbo. */
+  if(persistGranted !== true) persistGranted = false;
 }
 
 /* Recovery link — #k=<base64 gistId:token>. The home-screen shortcut keeps the
@@ -512,6 +542,7 @@ function targetFromLast(ex,last){
 const PATTERNS = [
   ['wrist-curl',       /wrist-curl|finger-curl|wrist-roller/],
   ['reverse-curl',     /reverse-curl|zottman/],
+  ['leg-curl',         /leg-curl/],
   ['curl',             /curl/],
   ['pushdown',         /pushdown|kickback/],
   ['overhead-ext',     /overhead-triceps|french-press|triceps-extension|skull-crusher/],
@@ -526,7 +557,6 @@ const PATTERNS = [
   ['pulldown',         /pulldown|pull-up|chin-up/],
   ['shrug',            /shrug/],
   ['hinge',            /deadlift|romanian|good-morning|glute-bridge|pull-through|hip-thrust/],
-  ['leg-curl',         /leg-curl/],
   ['leg-extension',    /leg-extension/],
   ['calf',             /calf/],
   ['squat',            /squat|leg-press|lunge|step-up|hack/],
@@ -669,7 +699,7 @@ function deloadAdvice(){
   });
   return out;
 }
-function weakPoint(){const prof=computeProfile();const arr=radarAxes().map(a=>({key:a.key,label:a.label,score:prof[a.key]})).sort((a,b)=>a.score-b.score);const weak=arr[0];const exs=allExercises().filter(ex=>{if(weak.key==='arms')return['biceps','triceps','forearms'].includes(ex.muscle);if(weak.key==='push')return['chest','shoulders','triceps'].includes(ex.muscle);if(weak.key==='pull')return['back','biceps','forearms'].includes(ex.muscle);if(weak.key==='legs')return LEG_MUSCLES.includes(ex.muscle);return ex.muscle===weak.key}).map(ex=>({ex,score:scoreFromEntry(ex,latestEntryFor(ex))})).sort((a,b)=>a.score-b.score);return{area:weak,exercises:exs.slice(0,2),target:exs[0]?targetEntry(exs[0].ex):null}}
+function weakPoint(){const prof=computeProfile();const arr=radarAxes().map(a=>({key:a.key,label:a.label,score:prof[a.key]})).sort((a,b)=>a.score-b.score);const weak=arr[0];const exs=uniqueExercises().filter(ex=>{if(weak.key==='arms')return['biceps','triceps','forearms'].includes(ex.muscle);if(weak.key==='push')return['chest','shoulders','triceps'].includes(ex.muscle);if(weak.key==='pull')return['back','biceps','forearms'].includes(ex.muscle);if(weak.key==='legs')return LEG_MUSCLES.includes(ex.muscle);return ex.muscle===weak.key}).map(ex=>({ex,score:scoreFromEntry(ex,latestEntryFor(ex))})).sort((a,b)=>a.score-b.score);return{area:weak,exercises:exs.slice(0,2),target:exs[0]?targetEntry(exs[0].ex):null}}
 function projection(){const tl=scoreTimeline();if(tl.length<2)return{message:'Log at least two sessions to generate a projection.',target:null,weeks:null};const recent=tl.slice(-6);const first=recent[0],last=recent[recent.length-1];const weeks=Math.max(.2,(last.timestamp-first.timestamp)/604800000);const rate=(last.overall-first.overall)/weeks;if(rate<=.2)return{message:'Current trend is flat. Hit the next session targets for two weeks to restart projection.',target:null,weeks:null};const targets=[50,60,70,80,90,100].filter(x=>x>last.overall);const target=targets[0]||100;const w=Math.ceil((target-last.overall)/rate);return{message:`At the current pace, ${target} OVR is roughly ${w} week${w===1?'':'s'} away.`,target,weeks:w}}
 function plateFor(weight){
   const bar=Number(state.settings.barWeight)||20;
@@ -748,7 +778,7 @@ function analystNote(){
 function hasMeaningfulUnsavedData(){if((state.sessions||[]).length<2&&!state.settings.programUpdatedAt)return false;const lastChange=latestSignificantChange();if(!lastChange)return false;const anchor=Math.max(state.settings.lastExportAt?new Date(state.settings.lastExportAt).getTime():0,state.settings.lastSyncAt?new Date(state.settings.lastSyncAt).getTime():0);if(!anchor)return true;return lastChange>anchor}
 function latestSignificantChange(){const sessionTime=Math.max(0,...(state.sessions||[]).map(s=>Number(s.timestamp)||0));const dataChange=state.settings.lastDataChangeAt?new Date(state.settings.lastDataChangeAt).getTime():0;const programChange=state.settings.programUpdatedAt?new Date(state.settings.programUpdatedAt).getTime():0;return Math.max(sessionTime,dataChange,programChange)}
 
-function achievements(){const p=computeProfile(),sum=trainingSummary(),ach=[];const add=(g,n,d,ok,need,pts)=>ach.push({g,n,d,ok,need,pts});const sessions=sum.total;[1,2,3,5,8,12,16,20,24,28,32,36,40,44,48].forEach((n,i)=>add('Consistency',`${n} Session${n===1?'':'s'}`,`Log ${n} completed workout${n===1?'':'s'}.`,sessions>=n,`${sessions}/${n}`,i<4?10:i<9?20:35));[1,3,6].forEach((r,i)=>{const count=Math.min(...state.program.map((d,di)=>state.sessions.filter(s=>s.dayIndex===di).length));add('Consistency',`${r} Full Rotation${r===1?'':'s'}`,`Complete every day of the cycle ${r} time${r===1?'':'s'}.`,count>=r,`${count}/${r}`,i===0?20:i===1?35:55)});const ws=weekStreak();[2,4,8,12].forEach((n,i)=>add('Consistency',`${n} Week Streak`,`Hold a streak of ${n} consecutive weeks with 3+ sessions.`,ws>=n,`${ws}/${n}`,i<2?25:50));[36,38,40,42,45,48,50,55,60,65,70,75].forEach(t=>add('Overall',`${t} OVR`,`Reach ${t} overall.`,p.overall>=t,`${p.overall}/${t}`,achievementPointsForThreshold(t)));radarAxes().forEach(a=>[40,45,50,55,60].forEach(t=>add('Muscle Profile',`${a.label} ${t}`,`Reach ${t} score for ${a.label.toLowerCase()}.`,(p[a.key]||0)>=t,`${p[a.key]||0}/${t}`,achievementPointsForThreshold(t))));allExercises().forEach(ex=>{const sc=scoreFromEntry(ex,latestEntryFor(ex));add('Exercise Scores',`${ex.name} 45`,`Reach 45 score on ${ex.name}.`,sc>=45,`${sc}/45`,20)});const prCount=sum.prs;[1,3,5,8,12,16,20,25,30,40].forEach((n,i)=>add('PRs',`${n} PR${n===1?'':'s'}`,`Record ${n} personal record${n===1?'':'s'}.`,prCount>=n,`${prCount}/${n}`,i<3?15:i<7?30:50));const week=weeklyWindow(),weeklyVol=totalVolumeForSessions(week),completeDays=new Set(week.map(s=>s.dayIndex)).size;[[2,'Two Session Week'],[3,'Three Session Week'],[4,'Four Session Week']].forEach(([n,label],i)=>add('Discipline',label,`Log ${n} sessions in the last 7 days.`,week.length>=n,`${week.length}/${n}`,15+i*10));add('Discipline','Balanced Week','Train all three days in the last 7 days.',completeDays>=3,`${completeDays}/3`,35);add('Discipline','Volume Base','Lift 3000KG total volume in the last 7 days.',weeklyVol>=3000,`${weeklyVol}/3000`,20);add('Discipline','Volume Push','Lift 5000KG total volume in the last 7 days.',weeklyVol>=5000,`${weeklyVol}/5000`,35);add('Discipline','Volume Surge','Lift 7500KG total volume in the last 7 days.',weeklyVol>=7500,`${weeklyVol}/7500`,55);add('Discipline','Clean Data','Back up after meaningful logged progress.',!hasMeaningfulUnsavedData()&&sessions>=2,hasMeaningfulUnsavedData()?'Backup Needed':'Saved',20);add('Discipline','Program Owner','Customize the editable program at least once.',Boolean(state.settings.programUpdatedAt),state.settings.programUpdatedAt?'Done':'Not Yet',20);add('Discipline','Two Device Sync','Set up cloud sync so phone and laptop share one ledger.',Boolean(state.settings.gistId&&state.settings.gistToken),state.settings.gistId?'Done':'Not Yet',25);return ach.slice(0,120)}
+function achievements(){const p=computeProfile(),sum=trainingSummary(),ach=[];const add=(g,n,d,ok,need,pts)=>ach.push({g,n,d,ok,need,pts});const sessions=sum.total;[1,2,3,5,8,12,16,20,24,28,32,36,40,44,48].forEach((n,i)=>add('Consistency',`${n} Session${n===1?'':'s'}`,`Log ${n} completed workout${n===1?'':'s'}.`,sessions>=n,`${sessions}/${n}`,i<4?10:i<9?20:35));[1,3,6].forEach((r,i)=>{const count=Math.min(...state.program.map((d,di)=>state.sessions.filter(s=>s.dayIndex===di).length));add('Consistency',`${r} Full Rotation${r===1?'':'s'}`,`Complete every day of the cycle ${r} time${r===1?'':'s'}.`,count>=r,`${count}/${r}`,i===0?20:i===1?35:55)});const ws=weekStreak();[2,4,8,12].forEach((n,i)=>add('Consistency',`${n} Week Streak`,`Hold a streak of ${n} consecutive weeks with 3+ sessions.`,ws>=n,`${ws}/${n}`,i<2?25:50));[36,38,40,42,45,48,50,55,60,65,70,75].forEach(t=>add('Overall',`${t} OVR`,`Reach ${t} overall.`,p.overall>=t,`${p.overall}/${t}`,achievementPointsForThreshold(t)));radarAxes().forEach(a=>[40,45,50,55,60].forEach(t=>add('Muscle Profile',`${a.label} ${t}`,`Reach ${t} score for ${a.label.toLowerCase()}.`,(p[a.key]||0)>=t,`${p[a.key]||0}/${t}`,achievementPointsForThreshold(t))));uniqueExercises().forEach(ex=>{const sc=scoreFromEntry(ex,latestEntryFor(ex));add('Exercise Scores',`${ex.name} 45`,`Reach 45 score on ${ex.name}.`,sc>=45,`${sc}/45`,20)});const prCount=sum.prs;[1,3,5,8,12,16,20,25,30,40].forEach((n,i)=>add('PRs',`${n} PR${n===1?'':'s'}`,`Record ${n} personal record${n===1?'':'s'}.`,prCount>=n,`${prCount}/${n}`,i<3?15:i<7?30:50));const week=weeklyWindow(),weeklyVol=totalVolumeForSessions(week),completeDays=new Set(week.map(s=>s.dayIndex)).size;[[2,'Two Session Week'],[3,'Three Session Week'],[4,'Four Session Week']].forEach(([n,label],i)=>add('Discipline',label,`Log ${n} sessions in the last 7 days.`,week.length>=n,`${week.length}/${n}`,15+i*10));add('Discipline','Balanced Week','Train all three days in the last 7 days.',completeDays>=3,`${completeDays}/3`,35);add('Discipline','Volume Base','Lift 3000KG total volume in the last 7 days.',weeklyVol>=3000,`${weeklyVol}/3000`,20);add('Discipline','Volume Push','Lift 5000KG total volume in the last 7 days.',weeklyVol>=5000,`${weeklyVol}/5000`,35);add('Discipline','Volume Surge','Lift 7500KG total volume in the last 7 days.',weeklyVol>=7500,`${weeklyVol}/7500`,55);add('Discipline','Clean Data','Back up after meaningful logged progress.',!hasMeaningfulUnsavedData()&&sessions>=2,hasMeaningfulUnsavedData()?'Backup Needed':'Saved',20);add('Discipline','Program Owner','Customize the editable program at least once.',Boolean(state.settings.programUpdatedAt),state.settings.programUpdatedAt?'Done':'Not Yet',20);add('Discipline','Two Device Sync','Set up cloud sync so phone and laptop share one ledger.',Boolean(state.settings.gistId&&state.settings.gistToken),state.settings.gistId?'Done':'Not Yet',25);return ach.slice(0,120)}
 
 function compareToPrevious(dayIndex,entries){const prev=previousSameDay(dayIndex);const day=planDay(dayIndex);const active=state.session?sessionExercises(day):day.groups.flatMap(g=>g.exercises);const removed=(state.session?.removedExercises||[]).map(exById);const exercises=[...active,...removed];const lines=[];let up=0,down=0,held=0,total=0;for(const ex of exercises){const nowE=entries[ex.id]||baselineEntry(ex);const prevE=prev?.entries?.[ex.id]||baselineEntry(ex);const strength=(entryEst(ex,nowE)-entryEst(ex,prevE))/Math.max(1,entryEst(ex,prevE));const vol=(volumeEntry(nowE)-volumeEntry(prevE))/Math.max(1,volumeEntry(prevE));const index=strength*.72+vol*.28;const dir=index>.015?'up':index<-.015?'down':'held';if(dir==='up')up++;else if(dir==='down')down++;else held++;total+=index;lines.push({id:ex.id,name:ex.name,strength,vol,index,dir})}const avg=total/Math.max(1,lines.length);let grade='C';if(!prev&&Math.abs(avg)<.012)grade='BASE';else if(avg>=.08)grade='S';else if(avg>=.045)grade='A';else if(avg>=.018)grade='B';else if(avg>=-.015)grade='C';else if(avg>=-.045)grade='D';else grade='F';return{prev,first:!prev,lines,up,down,held,avg,grade}}
 function detectPRs(entries){const prs=[];for(const id in entries){const ex=exById(id);const before=bestEntryFor(ex).entry;const curr=entries[id];if(entryEst(ex,curr)>entryEst(ex,before)+.1)prs.push({id,name:ex.name,kind:'Estimated Max',old:Math.round(entryEst(ex,before)*10)/10,now:Math.round(entryEst(ex,curr)*10)/10});if(volumeEntry(curr)>volumeEntry(before)+.1&&ex.scoreMode!=='reps')prs.push({id,name:ex.name,kind:'Volume',old:Math.round(volumeEntry(before)),now:Math.round(volumeEntry(curr))})}return prs}
@@ -1036,10 +1066,10 @@ function applyPreset(name){
   const legs=name==='withLegs';
   confirmBox={
     title:legs?'Switch to the full-body program?':'Switch to the upper-only program?',
-    text:`Every logged session and score stays exactly as it is. Lifts you stop training keep their history and pick it back up if you ever add them again.${state.session?' The workout you have open will be discarded.':''}`,
+    text:`Your logged sessions, scores and PRs are untouched. This DOES replace the program itself: any exercise you added, renamed or retuned, and any sets, rep ranges or start and goal loads you edited, revert to the coached values. A snapshot is saved first so you can undo it in Data.${state.session?' The workout you have open will be discarded.':''}`,
     ok:'Apply program', danger:false,
     onYes:()=>{
-      snapshot('pre-program-switch');
+      snapshot('pre-program-switch-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,''));
       state.program=presetToProgram(preset);
       state.currentDayIndex=0; state.session=null; openDay=0;
       state.settings.programPreset=name;
@@ -1355,7 +1385,7 @@ function renderMaxChart(){const rows=uniqueExercises().map(ex=>{const curr=entry
 
 function renderSummary(){const p=computeProfile(),b=bestProfile(),sum=trainingSummary();const advice=nextScoreAdvice();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('summary')}<section class="hero"><div class="eyebrow">Summary sheet</div><div class="level-head"><div><div class="title" style="color:${scoreColor(p.overall)}">Overall ${p.overall}</div><div class="sub">Current performance against your 100-score goal standards.</div></div><div class="rank" style="color:${scoreColor(p.overall)}">${rank(p.overall)}</div></div></section><div class="grid3"><div class="metric"><div class="num">${sum.total}</div><div class="lab">Sessions</div></div><div class="metric"><div class="num">${sum.prs}</div><div class="lab">PRs</div></div><div class="metric"><div class="num">${bodyweight()}</div><div class="lab">Body KG</div></div></div><div class="section"><h2>Next score increase</h2><span>Actionable</span></div><div class="card"><ol class="feedback-list">${advice.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><div class="section"><h2>Strength ledger</h2><span>Tap a lift</span></div>${renderMaxChart()}<div class="section"><h2>Category sheet</h2><span>Current vs best</span></div><div class="card">${radarAxes().map(a=>`<div class="row"><div><strong>${a.label}</strong><div class="small faint">Best ${b[a.key]}</div></div><div class="mono" style="color:${scoreColor(p[a.key])}">${p[a.key]}</div></div>`).join('')}</div></div>`}
 
-function renderWeekly(){const list=weeklyWindow(),weak=weakPoint(),proj=projection();let best='None yet',bestScore=-1;for(const ex of uniqueExercises()){const sc=scoreFromEntry(ex,latestEntryFor(ex));if(sc>bestScore){bestScore=sc;best=ex.name}}const worst=weak.exercises[0]?.ex.name||'None yet';const stuck=allExercises().map(ex=>({ex,p:plateauInfo(ex)})).filter(x=>x.p.stuck);const deload=deloadAdvice();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('weekly')}<section class="hero"><div class="eyebrow">Weekly review</div><div class="title">${list.length} session${list.length===1?'':'s'}</div><div class="sub">A coaching summary for the last seven days.</div></section><div class="grid2"><div class="metric"><div class="num">${totalVolumeForSessions(list)}</div><div class="lab">KG volume</div></div><div class="metric"><div class="num">${list.reduce((s,x)=>s+(x.prs?x.prs.length:0),0)}</div><div class="lab">PRs</div></div><div class="metric"><div class="num">${trainingSummary().missed}</div><div class="lab">Missed days</div></div><div class="metric"><div class="num">${computeProfile().overall}</div><div class="lab">OVR</div></div></div>${deload.map(d=>`<div class="banner warn"><strong>Deload advised</strong><div>${esc(d)}</div></div>`).join('')}${renderReadiness(true)}${renderBlockCard()}${renderMuscleVolume()}<div class="section"><h2>Coach recommendation</h2><span>Next 7 days</span></div><div class="card"><div class="row"><div><strong>Weakest area: ${weak.area.label}</strong><div class="small faint">Best focus: ${weak.exercises.map(x=>x.ex.name).join(' and ')||'Log more data'}</div></div><div class="mono" style="color:${scoreColor(weak.area.score)}">${weak.area.score}</div></div><ol class="feedback-list">${(weak.exercises.length?weak.exercises.map(x=>`Add 1 to 2 total reps on ${x.ex.name}, aiming for ${fmtEntry(targetEntry(x.ex))}.`):['Complete two more sessions to generate a target.']).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div>${stuck.length?`<div class="section"><h2>Plateau watch</h2><span>${stuck.length} lift${stuck.length===1?'':'s'}</span></div><div class="card">${stuck.map(x=>`<div class="row"><div><strong>${esc(x.ex.name)}</strong><div class="small faint">${x.p.since} sessions since the last estimated-max PR.</div></div><button class="secondary" data-action="exercise" data-ex="${x.ex.id}">Open</button></div>`).join('')}</div>`:''}<div class="section"><h2>Weekly facts</h2><span>Summary</span></div><div class="card"><div class="row"><span>Best exercise</span><strong>${esc(best)}</strong></div><div class="row"><span>Weakest exercise</span><strong>${esc(worst)}</strong></div><div class="row"><span>Projection</span><strong>${esc(proj.message)}</strong></div></div>${renderTrainingTracker()}</div>`}
+function renderWeekly(){const list=weeklyWindow(),weak=weakPoint(),proj=projection();let best='None yet',bestScore=-1;for(const ex of uniqueExercises()){const sc=scoreFromEntry(ex,latestEntryFor(ex));if(sc>bestScore){bestScore=sc;best=ex.name}}const worst=weak.exercises[0]?.ex.name||'None yet';const stuck=uniqueExercises().map(ex=>({ex,p:plateauInfo(ex)})).filter(x=>x.p.stuck);const deload=deloadAdvice();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('weekly')}<section class="hero"><div class="eyebrow">Weekly review</div><div class="title">${list.length} session${list.length===1?'':'s'}</div><div class="sub">A coaching summary for the last seven days.</div></section><div class="grid2"><div class="metric"><div class="num">${totalVolumeForSessions(list)}</div><div class="lab">KG volume</div></div><div class="metric"><div class="num">${list.reduce((s,x)=>s+(x.prs?x.prs.length:0),0)}</div><div class="lab">PRs</div></div><div class="metric"><div class="num">${trainingSummary().missed}</div><div class="lab">Missed days</div></div><div class="metric"><div class="num">${computeProfile().overall}</div><div class="lab">OVR</div></div></div>${deload.map(d=>`<div class="banner warn"><strong>Deload advised</strong><div>${esc(d)}</div></div>`).join('')}${renderReadiness(true)}${renderBlockCard()}${renderMuscleVolume()}<div class="section"><h2>Coach recommendation</h2><span>Next 7 days</span></div><div class="card"><div class="row"><div><strong>Weakest area: ${weak.area.label}</strong><div class="small faint">Best focus: ${weak.exercises.map(x=>x.ex.name).join(' and ')||'Log more data'}</div></div><div class="mono" style="color:${scoreColor(weak.area.score)}">${weak.area.score}</div></div><ol class="feedback-list">${(weak.exercises.length?weak.exercises.map(x=>`Add 1 to 2 total reps on ${x.ex.name}, aiming for ${fmtEntry(targetEntry(x.ex))}.`):['Complete two more sessions to generate a target.']).map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div>${stuck.length?`<div class="section"><h2>Plateau watch</h2><span>${stuck.length} lift${stuck.length===1?'':'s'}</span></div><div class="card">${stuck.map(x=>`<div class="row"><div><strong>${esc(x.ex.name)}</strong><div class="small faint">${x.p.since} sessions since the last estimated-max PR.</div></div><button class="secondary" data-action="exercise" data-ex="${x.ex.id}">Open</button></div>`).join('')}</div>`:''}<div class="section"><h2>Weekly facts</h2><span>Summary</span></div><div class="card"><div class="row"><span>Best exercise</span><strong>${esc(best)}</strong></div><div class="row"><span>Weakest exercise</span><strong>${esc(worst)}</strong></div><div class="row"><span>Projection</span><strong>${esc(proj.message)}</strong></div></div>${renderTrainingTracker()}</div>`}
 
 function trendPoints(ex){return sessionsForEx(ex).map(x=>({date:x.session.date,value:entryEst(ex,x.entry),session:x.session,entry:x.entry}))}
 /* ============ CHART ENGINE ================================================
@@ -1494,17 +1524,17 @@ function renderData(){
   <section class="hero"><div class="eyebrow">Data center</div><div class="title">One ledger, every device</div><div class="sub">Cloud sync keeps phone and laptop identical. Snapshots and exports protect against everything else.</div></section>
   ${renderRecoveryBanner()}${renderHealthBanner()}
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Cloud sync ${conf?'· on':'· not set up'}</strong><div class="small faint">${conf?`Auto-sync ${state.settings.autoSync?'enabled':'paused'} · last sync ${state.settings.lastSyncAt?relTime(new Date(state.settings.lastSyncAt).getTime()):'never'}`:'Two minutes, once: your data then follows you to any device and any URL.'}</div></div>${renderSyncChip()}</div>
-    ${conf?'':`<ol class="feedback-list"><li>On github.com → Settings → Developer settings → Fine-grained tokens, create a token whose only permission is Gists: read and write.</li><li>Paste it below and press Save to cloud — a private gist is created and its ID fills in automatically.</li><li>On your other device, paste the same token and gist ID, then press Load from cloud once.</li></ol>`}
+    ${conf?'':`<ol class="feedback-list"><li>On github.com → Settings → Developer settings → Fine-grained tokens, create a token whose only permission is Gists: read and write. Give it nothing else — the recovery link below carries this token, so its permissions are the blast radius if the link ever leaks.</li><li>Paste it below and press Save to cloud — a private gist is created and its ID fills in automatically.</li><li>On your other device, paste the same token and gist ID, then press Load from cloud once.</li></ol>`}
     <div class="field" style="margin-top:10px"><label>GitHub token</label><input type="password" data-sync-field="gistToken" value="${esc(state.settings.gistToken||'')}" placeholder="Fine-grained token with gist access" autocomplete="off"></div>
     <div class="field" style="margin-top:10px"><label>Gist ID</label><input data-sync-field="gistId" value="${esc(state.settings.gistId||'')}" placeholder="Leave blank to create a new private gist"></div>
     <div class="session-actions" style="margin-top:12px"><button class="secondary gold" data-action="gist-save">Save to cloud</button><button class="secondary" data-action="gist-load">Load from cloud</button><button class="secondary" data-action="toggle-autosync">${state.settings.autoSync?'Pause auto-sync':'Enable auto-sync'}</button></div>
     <div class="small faint" style="margin-top:10px">The token stays on this device only — it is never included in the cloud file or in exports.</div>
   </div>
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Durability</strong><div class="small faint">Whether this browser is allowed to keep your ledger between visits.</div></div><div class="pill">${persistGranted===true?'Persistent':persistGranted===false?'At risk':'Checking'}</div></div>
-    <div class="row"><span>Eviction protection</span><strong>${persistGranted===true?'Granted':persistGranted===false?'Not granted':'Unknown'}</strong></div>
+    <div class="row"><span>Eviction protection</span><strong>${persistGranted===true?'Granted':persistGranted===false?'Not granted':'Checking'}</strong></div>
     <div class="row"><span>Local writes</span><strong>${STORAGE.ok?(saveFailed?'Failing — out of space':'Working'):'Blocked by browser'}</strong></div>
     ${persistGranted===true?'':`<ol class="feedback-list"><li>Open this page in Safari, press Share, then Add to Home Screen. A home-screen app is the only kind iOS exempts from clearing storage after a week.</li><li>Open the app from that icon from now on, not from a Safari tab.</li></ol>`}
-    ${link?`<div class="field" style="margin-top:10px"><label>Recovery link — bookmark this, it restores everything</label><input readonly value="${esc(link)}" onfocus="this.select()"></div><div class="session-actions" style="margin-top:10px"><button class="secondary gold" data-action="copy-link">Copy recovery link</button></div><div class="small faint" style="margin-top:9px">This link carries your cloud credentials. Add the app to your home screen using it and the ledger rebuilds itself even if the phone wipes local storage. Keep it private — anyone holding it can read and write your gists.</div>`:'<div class="small faint" style="margin-top:10px">Set up cloud sync above to generate a recovery link.</div>'}
+    ${link?`<div class="field" style="margin-top:10px"><label>Recovery link — bookmark this, it restores everything</label><input readonly value="${esc(link)}" onfocus="this.select()"></div><div class="session-actions" style="margin-top:10px"><button class="secondary gold" data-action="copy-link">Copy recovery link</button></div><div class="small faint" style="margin-top:9px">Add the app to your home screen using this link and the ledger rebuilds itself even after a storage wipe. The trade-off is real: the link <em>is</em> your GitHub token, only base64'd, so it lands anywhere a URL lands — browser history, synced bookmarks, screenshots, anything you paste it into. Use a fine-grained token whose only permission is Gists, so a leak costs you your gists and nothing else, and revoke it on GitHub if the link ever escapes.</div>`:'<div class="small faint" style="margin-top:10px">Set up cloud sync above to generate a recovery link.</div>'}
   </div>
   <div class="card ${unsaved?'backup-warn':'backup-ok'}"><div class="row" style="padding-top:0"><div><strong>${unsaved?'Backup recommended':'Backups clear'}</strong><div class="small faint">Last export: ${esc(last)}.</div></div><div class="pill">${unsaved?'Unsaved':'Safe'}</div></div><div class="session-actions"><button class="secondary gold" data-action="export">Export JSON</button><button class="secondary" data-action="export-csv">Export CSV</button><button class="secondary" data-action="import">Import JSON</button></div></div>
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Snapshots</strong><div class="small faint">Automatic local restore points — one per training day plus pre-import, pre-reset and pre-restore.</div></div><button class="secondary" data-action="snap-now">Snapshot now</button></div>${snaps.length?snaps.map(s=>`<div class="row"><div><strong>${esc(s.label)}</strong><div class="small faint">${s.sessions} sessions · ${relTime(s.at)}</div></div><button class="secondary" data-action="snap-restore" data-key="${esc(s.key)}">Restore</button></div>`).join(''):'<div class="small faint">No snapshots yet. One is taken automatically after every finished session.</div>'}</div>
@@ -1702,7 +1732,23 @@ window.addEventListener('error',ev=>{if(!crashed){crashed=true;try{app.innerHTML
 adoptRecoveryLink();
 render();
 snapshot();
-requestPersistence().then(()=>{ if(persistGranted===false) render(); });
+requestPersistence().then(()=>render());   // the answer changes what Data and the health banner say
+
+/* localStorage can be cleared while the IndexedDB mirror survives — that is the
+   whole point of keeping a second copy, and until now nothing ever read it. */
+if(state.__fresh){
+  IDB.read().then(mirror=>{
+    if(!mirror || !Array.isArray(mirror.sessions) || !mirror.sessions.length) return;
+    if(state.sessions.length) return;                 // cloud sync got there first
+    const n=mirror.sessions.length;
+    confirmBox={title:'Restore your ledger?',
+      text:`The main save on this device is empty, but a backup copy holding ${n} logged session${n===1?'':'s'} survived. This is what a browser storage wipe looks like. Restore it?`,
+      ok:'Restore '+n+' session'+(n===1?'':'s'), danger:false,
+      onYes:()=>{ state=migrate(mirror); openDay=state.session?state.session.dayIndex:state.currentDayIndex;
+        view=state.session?'workout':'home'; confirmBox=null; save(); render(); flash('Ledger restored from the local backup copy.'); }};
+    render();
+  });
+}
 if(state.settings.autoSync&&state.settings.gistToken&&state.settings.gistId){
   Sync.pull('boot').then(changed=>{if(changed){openDay=state.session?state.session.dayIndex:state.currentDayIndex;render()}});
 }

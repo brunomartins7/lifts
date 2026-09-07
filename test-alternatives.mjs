@@ -43,6 +43,27 @@ for (const ex of BANK) {
   checked++;
 }
 
+/* Classification assertions. The alternatives sweep above cannot catch a wrong
+   label that every member of a group shares — both leg curls were classified as
+   'curl' and the sweep still passed, because they agreed with each other. These
+   pin the ordering-sensitive cases directly. */
+const cls = id => patternOf(BANK.find(b => b.id === id));
+for (const [id, want] of [
+  ['lever-lying-leg-curl',            'leg-curl'],       // must beat the generic /curl/
+  ['lever-kneeling-leg-curl',         'leg-curl'],
+  ['barbell-reverse-curl',            'reverse-curl'],   // must beat /curl/
+  ['dumbbell-seated-palms-up-wrist-curl', 'wrist-curl'],
+  ['sled-calf-press',                 'calf'],           // clip path contains "leg-press"
+  ['dumbbell-rear-lateral-raise',     'rear-delt'],      // name contains "lateral-raise"
+  ['dumbbell-reverse-fly',            'rear-delt'],      // name contains "fly"
+  ['cable-cross-over-revers-fly',     'rear-delt'],       // note the bank's "revers" spelling
+  ['lever-leg-extension',             'leg-extension'],
+  ['barbell-bench-press',             'horizontal-press'],
+  ['barbell-incline-bench-press',     'incline-press']
+]) {
+  assert.equal(cls(id), want, `${id} classified as ${cls(id)}, expected ${want} — check PATTERNS ordering`);
+}
+
 /* The two the trainee specifically said he does not know: they must never be
    offered as substitutes for each other. */
 const rc = BANK.find(b => b.id === 'barbell-reverse-curl');
@@ -51,5 +72,5 @@ assert.ok(!alternativesFor(rc).some(a => patternOf(a) === 'wrist-curl'), 'revers
 assert.ok(!alternativesFor(wc).some(a => patternOf(a) === 'reverse-curl'), 'wrist curl offered a reverse curl');
 
 const bare = BANK.filter(b => alternativesFor(b).length === 0).map(b => b.id);
-console.log(`ok — ${checked} bank exercises checked, every alternative is a like-for-like swap`);
+console.log(`ok — 11 classifications pinned, ${checked} bank exercises checked, every alternative is a like-for-like swap`);
 if (bare.length) console.log(`note — ${bare.length} with no alternative: ${bare.join(', ')}`);
