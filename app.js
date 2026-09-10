@@ -49,7 +49,7 @@ const DEFAULT_PLAN = [
   ]},
   {id:'C2',name:'Pump Press And Rear Delts',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
    {id:'inclinePump',name:'Incline Dumbbell Press Pump Set',clip:'pectorals/dumbbell-incline-bench-press.gif',type:'isolation',muscle:'chest',equipment:'dumbbell',sets:3,min:12,max:15,inc:2.5,startWeight:12.5,startReps:12,goalWeight:22.5,goalReps:12,averageWeight:17.5,averageReps:12,cues:['Use controlled pump reps.','Keep tension on chest.','Stop before form breaks.']},
-   {id:'cableRow',name:'Cable Seated Row',clip:'upper-back/cable-seated-row.gif',type:'isolation',muscle:'back',equipment:'cable',sets:3,min:12,max:15,inc:2.5,startWeight:12.5,startReps:12,goalWeight:32.5,goalReps:12,averageWeight:27.5,averageReps:12,cues:['Keep torso still.','Pull with upper back.','Control the eccentric.']}
+   {id:'cableRow',name:'Cable Seated Row',clip:'upper-back/cable-seated-row.gif',type:'compound',muscle:'back',equipment:'cable',sets:3,min:10,max:12,inc:2.5,startWeight:25,startReps:10,goalWeight:45,goalReps:12,averageWeight:27.5,averageReps:12,cues:['Keep torso still.','Pull with upper back.','Control the eccentric.']}
   ]},
   {id:'C3',name:'Arm Superset',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
    {id:'curlC',name:'Dumbbell Curl',clip:'biceps/dumbbell-standing-biceps-curl.gif',type:'isolation',muscle:'biceps',equipment:'dumbbell',sets:3,min:10,max:15,inc:2.5,startWeight:7.5,startReps:10,goalWeight:17.5,goalReps:12,averageWeight:12.5,averageReps:12,cues:['Keep elbows stable.','Squeeze without swinging.','Lower with control.']},
@@ -255,15 +255,26 @@ function repairProgram(p){
    load history. One id can only track one movement. The id is kept so the logged
    history survives; only the label and demo change. */
 const AMBIGUOUS = {
-  cableRow: {was:/Face Pulls Or Cable Row/i, name:'Cable Seated Row', clip:'upper-back/cable-seated-row.gif'},
-  cableFly: {was:/Dumbbell Fly Or Cable Fly/i, name:'Cable Standing Fly', clip:'pectorals/cable-standing-fly.gif'},
-  curl:     {was:/Cable Or Dumbbell Curl/i, name:'Dumbbell Curl', clip:'biceps/dumbbell-standing-biceps-curl.gif'}
+  cableRow: {was:/Face Pulls Or Cable Row/i, bank:'cable-seated-row'},
+  cableFly: {was:/Dumbbell Fly Or Cable Fly/i, bank:'cable-standing-fly'},
+  curl:     {was:/Cable Or Dumbbell Curl/i, bank:'dumbbell-standing-biceps-curl'}
 };
-function disambiguate(program){
-  for(const day of program||[]) for(const g of day.groups||[]) for(const ex of g.exercises||[]){
-    const fix=AMBIGUOUS[ex.id];
-    if(fix && fix.was.test(ex.name||'')){ ex.name=fix.name; ex.clip=fix.clip; }
+/* The label was only half the damage. "Face Pulls Or Cable Row" also carried a
+   face pull's loading standard — goal 32.5kg — so a 50kg cable row was scored
+   against a number a face pull would never reach, and every point of that
+   inflation landed in the back score. Renaming without moving the standard
+   across would have left the score exactly as wrong. */
+function disambiguate(st){
+  if(st.settings && st.settings.ambiguousFixedAt) return;
+  for(const day of st.program||[]) for(const g of day.groups||[]) for(const ex of g.exercises||[]){
+    const fix=AMBIGUOUS[ex.id]; if(!fix) continue;
+    const b=BANK.find(x=>x.id===fix.bank); if(!b) continue;
+    ex.name=b.name; ex.clip=b.clip; ex.muscle=b.muscle; ex.equipment=b.equipment; ex.type=b.type;
+    ex.min=b.min; ex.max=b.max; ex.inc=b.inc;
+    ex.startWeight=b.startWeight; ex.goalWeight=b.goalWeight;
+    ex.startReps=b.min; ex.goalReps=b.max;
   }
+  if(st.settings) st.settings.ambiguousFixedAt=new Date().toISOString();
 }
 function migrate(raw){
   const f = freshState();
@@ -279,7 +290,7 @@ function migrate(raw){
   }
   delete n.sessionsLog; delete n.roundDone;
   delete n.__recoveredFrom; delete n.__quarantined; delete n.__fresh;   // transient flags — set per-load by loadState, never persisted
-  disambiguate(n.program);
+  disambiguate(n);
   n.sessions = n.sessions.filter(s=>s&&s.entries).map(s=>normalizeSession(s,n));
   n.currentDayIndex = Number.isInteger(n.currentDayIndex)?clamp(n.currentDayIndex,0,n.program.length-1):0;
   if (n.session && n.session.dayIndex==null) n.session=null;
@@ -991,7 +1002,11 @@ function cycleRPE(exId,index){
 }
 function startSession(dayIndex){
   if(state.session&&state.session.dayIndex!==dayIndex){
-    confirmBox={title:'Replace active workout?',text:'Starting another day discards the current unfinished draft. Completed sessions are safe.',ok:'Replace draft',danger:false,onYes:()=>{state.session=buildDraft(dayIndex);openDay=dayIndex;view='workout';save();jumpTop();render()}};
+    const logged=completion().done;
+    confirmBox={title:'Replace active workout?',
+      text:logged?`The workout you have open has ${logged} logged set${logged===1?'':'s'} that have never been saved to your log. Replacing it throws that away — finish it first if you want it counted. A snapshot is taken either way.`:'Starting another day discards the current unfinished draft. Completed sessions are safe.',
+      ok:'Replace draft',danger:Boolean(logged),
+      onYes:()=>{snapshot('pre-draft-discard-'+new Date().toISOString().slice(0,16).replace(/[:T]/g,''));state.session=buildDraft(dayIndex);openDay=dayIndex;view='workout';save();jumpTop();render()}};
     render();return;
   }
   state.session=state.session?normalizeDraft(state.session):buildDraft(dayIndex);
@@ -1267,18 +1282,32 @@ function storageReport(){
   }
   return {level,verdict,raw:Boolean(raw),bytes:raw?raw.length:0,sessions,snaps,lastWrite,synced};
 }
+/* One line per launch, in its own key so it survives whatever happens to the
+   ledger. Three rounds of speculation have not settled where the sessions go;
+   this records what the app actually saw each time it opened, so the answer
+   comes from evidence rather than another theory. */
+const JOURNAL_KEY='brunian-lifts-journal';
+function journalBoot(){
+  try{
+    const j=JSON.parse(STORAGE.getItem(JOURNAL_KEY)||'[]');
+    j.push({t:now(),s:(state.sessions||[]).length,d:state.session?1:0,f:state.__fresh?1:0});
+    STORAGE.setItem(JOURNAL_KEY,JSON.stringify(j.slice(-40)));
+  }catch(_){}
+}
+function readJournal(){ try{ const j=JSON.parse(STORAGE.getItem(JOURNAL_KEY)||'[]'); return Array.isArray(j)?j:[]; }catch(_){ return []; } }
+
 /* Storage health — tells the truth about the current origin. */
 function storageHealth(){
   const proto=location.protocol, host=location.hostname;
-  if(!STORAGE.ok)return{level:'bad',msg:'This browser is blocking storage. Data lives only in memory for this tab. Set up cloud sync or export before closing.'};
-  if(saveFailed)return{level:'bad',msg:'The last save was rejected — this device is out of storage. Export now, then delete old snapshots in this screen.'};
+  if(!STORAGE.ok)return{level:'bad',title:'Storage blocked',msg:'This browser is blocking storage. Data lives only in memory for this tab. Set up cloud sync or export before closing.'};
+  if(saveFailed)return{level:'bad',title:'Out of space',msg:'The last save was rejected — this device is out of storage. Export now, then delete old snapshots in this screen.'};
   /* state.sessions is already in memory, so this stays cheap enough to run on
      every render. The full report parses the stored payload and lives in Data. */
   if(!state.settings.gistToken || !state.settings.gistId){
     const n=(state.sessions||[]).length;
-    if(n) return{level:'bad',msg:`This device holds the only copy of your ${n} logged session${n===1?'':'s'}, and this browser has been clearing it. Open Data and set up cloud sync — it is the only thing that survives a wipe.`};
+    if(n) return{level:'warn',title:'No off-device copy',msg:`This device holds the only copy of your ${n} logged session${n===1?'':'s'}. Nothing has been lost, but a wipe, a lost phone or a cleared Safari would take all of it. Cloud sync in Data is the fix.`};
   }
-  if(persistGranted===false)return{level:'warn',msg:'This browser has not granted persistent storage, so it may clear your ledger after about a week idle. Add the app to your home screen and set up cloud sync — both are in this screen.'};
+  if(persistGranted===false)return{level:'warn',title:'Eviction protection missing',msg:'This browser has not granted persistent storage, so it may clear your ledger after about a week idle. Add the app to your home screen and set up cloud sync — both are in this screen.'};
   if(proto==='file:')return{level:'warn',msg:'Running from a local file. Some phones clear file-based storage. Use one stable hosted URL (see the guide in Data) and set up cloud sync.'};
   if(/netlify\.app$/.test(host)&&(state.sessions||[]).length===0)return{level:'warn',msg:'Every new Netlify Drop upload is a brand-new site with empty storage. Deploy once to a stable URL and keep using that link.'};
   return{level:'ok',msg:''};
@@ -1306,7 +1335,7 @@ function renderToast(){return toast?`<div class="toast" role="status">${esc(toas
 function renderHealthBanner(){
   const h=storageHealth();
   if(h.level==='ok')return'';
-  return `<div class="banner ${h.level}"><strong>${h.level==='bad'?'Storage blocked':'Storage warning'}</strong><div>${esc(h.msg)}</div></div>`;
+  return `<div class="banner ${h.level}"><strong>${esc(h.title||(h.level==='bad'?'Storage problem':'Storage warning'))}</strong><div>${esc(h.msg)}</div></div>`;
 }
 function renderRecoveryBanner(){
   if(state.__recoveredFrom)return `<div class="banner warn"><strong>Recovered from snapshot</strong><div>The main save was unreadable, so the latest snapshot was loaded (${esc(String(state.__recoveredFrom).replace(SNAP_PREFIX,''))}). Check Data → Snapshots.</div></div>`;
@@ -1656,6 +1685,7 @@ function renderData(){
     <div class="row"><span>Eviction protection</span><strong>${persistGranted===true?'Granted':persistGranted===false?'Not granted':'Checking'}</strong></div>
     <div class="row"><span>Local writes</span><strong>${STORAGE.ok?(saveFailed?'Failing — out of space':'Working'):'Blocked by browser'}</strong></div>
     <div class="row"><span>Cloud copy</span><strong>${rep.synced?(state.settings.lastSyncAt?esc(relTime(new Date(state.settings.lastSyncAt).getTime())):'Configured, never synced'):'Not set up'}</strong></div>
+    ${(()=>{const j=readJournal().slice(-8).reverse();return j.length?`<div class="coach-h" style="margin-top:12px">Launch history</div><div class="small faint" style="margin-bottom:4px">What the app found each time it opened. If a number drops between launches, sessions are being lost rather than never saved.</div>${j.map(e=>`<div class="row"><span>${esc(new Date(e.t).toLocaleString([], {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}))}</span><strong>${e.s} session${e.s===1?'':'s'}${e.d?' · draft open':''}${e.f?' · empty start':''}</strong></div>`).join('')}`:''})()}
     ${persistGranted===true?'':`<ol class="feedback-list"><li>Open this page in Safari, press Share, then Add to Home Screen. A home-screen app is the only kind iOS exempts from clearing storage after a week.</li><li>Open the app from that icon from now on, not from a Safari tab.</li></ol>`}
     ${link?`<div class="field" style="margin-top:10px"><label>Recovery link — bookmark this, it restores everything</label><input readonly value="${esc(link)}" onfocus="this.select()"></div><div class="session-actions" style="margin-top:10px"><button class="secondary gold" data-action="copy-link">Copy recovery link</button></div><div class="small faint" style="margin-top:9px">Add the app to your home screen using this link and the ledger rebuilds itself even after a storage wipe. The trade-off is real: the link <em>is</em> your GitHub token, only base64'd, so it lands anywhere a URL lands — browser history, synced bookmarks, screenshots, anything you paste it into. Use a fine-grained token whose only permission is Gists, so a leak costs you your gists and nothing else, and revoke it on GitHub if the link ever escapes.</div>`:'<div class="small faint" style="margin-top:10px">Set up cloud sync above to generate a recovery link.</div>'}
   </div>
@@ -1853,10 +1883,26 @@ window.addEventListener('error',ev=>{if(!crashed){crashed=true;try{app.innerHTML
 /* Boot: adopt any recovery link first so a wiped device knows where its ledger
    lives, render immediately from local, then pull cloud in the background. */
 adoptRecoveryLink();
+journalBoot();
 render();
 snapshot();
 requestPersistence().then(()=>render());   // the answer changes what Data and the health banner say
 probeIDB().then(()=>{ if(view==='data') render(); });
+
+/* A workout only becomes a logged session when Finish is pressed. A draft left
+   open overnight keeps every rep but contributes nothing to the ledger, the
+   scores or the targets — which looks exactly like the app forgot the workout.
+   Say so on the next launch rather than letting it sit there silently. */
+if(state.session && (now()-(state.session.startedAt||now())) > 10*3600*1000){
+  const done=completion();
+  if(done.done>0){
+    const started=new Date(state.session.startedAt).toLocaleDateString([], {day:'numeric',month:'short'});
+    confirmBox={title:'Finish your workout from '+started+'?',
+      text:`It has ${done.done} logged set${done.done===1?'':'s'} but was never finished, so it is not in your log and none of your scores or targets have moved. Finishing saves it now. Cancel keeps it open.`,
+      ok:'Finish and save it', danger:false,
+      onYes:()=>{ confirmBox=null; finishSession(true); }};
+  }
+}
 
 /* localStorage can be cleared while the IndexedDB mirror survives — that is the
    whole point of keeping a second copy, and until now nothing ever read it. */
