@@ -973,8 +973,10 @@ const Sync = {
          deletion record; they are unioned too, so both devices agree. */
       const tombs = {};
       for (const t of [...(r.deleted||[]), ...(state.deleted||[])]) if (t && t.id) tombs[t.id] = t;
-      const cutoff = now() - 180*86400000;
-      merged.deleted = Object.values(tombs).filter(t=>(t.at||0) > cutoff);
+      /* Expiring a tombstone by age just re-opens the window it exists to close:
+         a device that has been offline longer than the expiry reintroduces its
+         deletion. They are small, so they are kept. */
+      merged.deleted = Object.values(tombs);
       for (const t of merged.deleted) delete byId[t.id];
       merged.sessions = Object.values(byId).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
       // bodyLog: union by date so a weigh-in on one device is never overwritten by the other
@@ -987,7 +989,11 @@ const Sync = {
       if (rp > lp){ merged.program = r.program; merged.settings = {...merged.settings, programUpdatedAt: r.settings.programUpdatedAt}; }
       else if (lp > rp){ merged.program = state.program; merged.settings = {...merged.settings, programUpdatedAt: state.settings.programUpdatedAt}; }
       merged.settings = {...merged.settings, gistToken: state.settings.gistToken, gistId: state.settings.gistId, autoSync: state.settings.autoSync};
-      if (state.session && !merged.session) merged.session = state.session;   // never lose an active draft
+      /* An unsaved workout in progress on THIS phone outranks anything the
+         other device left open. The old guard only protected it when the
+         merged side happened to have no draft at all. */
+      if (state.session) merged.session = state.session;
+      else if (r.session) merged.session = r.session;
       merged.exerciseIndex = {...r.exerciseIndex, ...state.exerciseIndex};
       state = migrate(merged);
     }catch(_){/* keep local on any merge issue */}
@@ -1026,7 +1032,14 @@ const Sync = {
           const f = j.files['brunian-lifts.json'] || Object.values(j.files)[0];
           if(f && f.content){ const parsed = JSON.parse(f.content); this.merge(parsed.data||parsed); }
         }
-      }catch(_){ /* unreadable remote: fall through and write ours */ }
+        else throw new Error('HTTP '+cur.status);
+      }catch(e){
+        /* Failing open here is how a stale device overwrites newer sessions on
+           a transient 5xx or rate limit. If the remote cannot be read, it must
+           not be replaced. */
+        this.setStatus('error','Could not read the cloud copy, so nothing was overwritten.');
+        return false;
+      }
     }
     const body = {description:'Brunian Lifts ledger', public:false,
       files:{'brunian-lifts.json':{content:JSON.stringify({app:'Brunian Lifts',version:state.version,updatedAt:new Date().toISOString(),data:this.stripLocal(state)},null,1)}}};
@@ -1036,6 +1049,23 @@ const Sync = {
       if(!res.ok) throw new Error('HTTP '+res.status);
       const json = await res.json();
       state.settings.gistId = json.id;
+      /* Read-merge-write is not atomic: two devices can read the same gist and
+         write in turn, and the second payload can omit what the first added.
+         Read back, and if anything of ours is missing, merge and write once
+         more. Bounded to one retry so a genuine conflict cannot spin. */
+      if(reason!=='verify'){
+        try{
+          const back = await fetch(`https://api.github.com/gists/${state.settings.gistId}`,{headers:{Authorization:`Bearer ${token}`}});
+          if(back.ok){
+            const bj = await back.json();
+            const bf = bj.files['brunian-lifts.json'] || Object.values(bj.files)[0];
+            const remote = JSON.parse(bf.content); const rd = remote.data||remote;
+            const there = new Set((rd.sessions||[]).map(x=>x.id));
+            const gone = state.sessions.filter(x=>!there.has(x.id));
+            if(gone.length){ this.merge(rd); return await this.push('verify'); }
+          }
+        }catch(_){ /* the write itself succeeded; a failed verify is not a failure */ }
+      }
       state.settings.lastSyncAt = new Date().toISOString();
       try{STORAGE.setItem(KEY,JSON.stringify(state))}catch(_){}
       this.setStatus('synced');
@@ -1105,7 +1135,9 @@ function cycleRPE(exId,index){
 }
 function startSession(dayIndex){
   if(state.session&&state.session.dayIndex!==dayIndex){
-    const logged=completion().done;
+    /* completion() deliberately ignores extras so they cannot pad the grade,
+       which makes it the wrong question to ask before throwing work away. */
+    const logged=unsavedSetCount();
     confirmBox={title:'Replace active workout?',
       text:logged?`The workout you have open has ${logged} logged set${logged===1?'':'s'} that have never been saved to your log. Replacing it throws that away — finish it first if you want it counted. A snapshot is taken either way.`:'Starting another day discards the current unfinished draft. Completed sessions are safe.',
       ok:'Replace draft',danger:Boolean(logged),
@@ -1167,6 +1199,18 @@ function fillFromTarget(exId){const d=draftFor(exId);if(!d)return;const ex=exByI
    counted stale keys from swapped-out exercises, and counted an exercise removed
    for today twice — once from its lingering marks and again from the explicit
    penalty below. sessionExercises() already excludes removed lifts. */
+/* Everything logged in the current draft that has not reached the ledger,
+   extras and warmups included. Used before anything destructive. */
+function unsavedSetCount(){
+  if(!state.session) return 0;
+  let n=0;
+  for(const ex of sessionExercises()){
+    const d=state.session.draft[ex.id]; if(!d) continue;
+    n+=(state.session.setDone[ex.id]||[]).filter(Boolean).length;
+    n+=(d.warmups||[]).filter(w=>w.done).length;
+  }
+  return n;
+}
 function completion(){
   if(!state.session)return{done:0,total:0,pct:0};
   let done=0,total=0;
@@ -1320,6 +1364,13 @@ function saveEditSession(){
        those two fields silently deleted per-set effort, which is not something
        the user asked to change. */
     const next={weight:clamp(Number(w.value||0),0,500),reps:reps.length?reps:baselineEntry(ex).reps,warmups:(prev.warmups||[])};
+    /* The form exposes one weight. Rebuilding from it would flatten a drop set
+       into a single load, so per-set loads survive unless the single weight was
+       actually changed. */
+    if(Array.isArray(prev.weights)&&prev.weights.length){
+      const weightEdited=Number(w.value||0)!==Number(prev.weight||0);
+      if(!weightEdited) next.weights=next.reps.map((_,i)=>Number(prev.weights[i])||next.weight);
+    }
     if(Array.isArray(prev.rpe)&&prev.rpe.some(x=>x>0)) next.rpe=next.reps.map((_,i)=>Number(prev.rpe[i])||0);
     s.entries[id]=next;
   }
@@ -1332,6 +1383,23 @@ function saveEditSession(){
   s.volume=totalVolumeForSessions([{entries:s.entries}]);
   s.rpe=entriesAvgRPE(s.entries)||null;
   s.updatedAt=now();
+  /* A correction that removes a false record must also remove the PR and grade
+     it produced, or the achievement and the log keep reporting the old number. */
+  const others=sortedSessions().filter(x=>x.id!==s.id&&(x.timestamp||0)<=(s.timestamp||0));
+  const bestBefore={};
+  for(const o of others) for(const id in o.entries){
+    const ex=exById(id); const cur=bestBefore[id];
+    if(!cur||entryEst(ex,o.entries[id])>entryEst(ex,cur)) bestBefore[id]=o.entries[id];
+  }
+  s.prs=[];
+  for(const id in s.entries){
+    const ex=exById(id); const before=bestBefore[id];
+    if(!before) continue;
+    const nowEst=entryEst(ex,s.entries[id]), wasEst=entryEst(ex,before);
+    if(nowEst>wasEst+.1) s.prs.push({id,name:exNameIn(s,id),kind:'Estimated Max',old:Math.round(wasEst*10)/10,now:Math.round(nowEst*10)/10});
+  }
+  s.completion=null;                       // never re-assert a completion we cannot know
+  if(state.lastReport&&state.lastReport.id===s.id) state.lastReport=null;
   s.overall=profileUpTo(s.timestamp).overall;
   /* Every later session's snapshot of the profile depends on this one. */
   for(const later of sortedSessions()) if((later.timestamp||0)>(s.timestamp||0)) later.overall=profileUpTo(later.timestamp).overall;
@@ -1495,6 +1563,10 @@ function looksLikeLedger(d){
   if(!Array.isArray(sessions)) return 'That file has no sessions list, so it is not an export from this app.';
   if(!Array.isArray(d.program)&&!d.settings) return 'That file has no program or settings, so it is not an export from this app.';
   if(sessions.length&&!sessions.every(x=>x&&typeof x==='object'&&x.entries)) return 'That file has a sessions list, but the records are not workouts.';
+  /* An empty but correctly shaped file passes every structural test and wipes a
+     real history. Replacing something with nothing needs to be deliberate. */
+  if(!sessions.length&&(state.sessions||[]).length)
+    return `That file contains no sessions, and this device has ${state.sessions.length}. Importing it would replace your history with an empty one — export first if you really mean to.`;
   return '';
 }
 function importData(){const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=()=>{const file=input.files&&input.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result||'{}'));const payload=parsed.data||parsed;const bad=looksLikeLedger(payload);if(bad){flash(bad);return}snapshot('pre-import');const keepToken=state.settings.gistToken,keepId=state.settings.gistId;state=migrate(payload);state.settings.gistToken=state.settings.gistToken||keepToken;state.settings.gistId=state.settings.gistId||keepId;openDay=state.session?state.session.dayIndex:state.currentDayIndex;view=state.session?'workout':'home';save();jumpTop();render();flash('Import complete.')}catch(_){flash('Import failed. Use a Brunian Lifts JSON export file.')}};reader.readAsText(file)};input.click()}
@@ -2225,7 +2297,15 @@ window.addEventListener('beforeunload',e=>{
   if(state.session){e.preventDefault();e.returnValue=''}
 });
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='hidden'){try{STORAGE.setItem(KEY,JSON.stringify(state))}catch(_){}if(Sync.configured()&&state.settings.autoSync&&state.settings.gistId)Sync.push('unload')}
+  if(document.visibilityState==='hidden'){
+    try{STORAGE.setItem(KEY,JSON.stringify(state))}catch(_){}
+    /* The unload push wrote without reading the cloud first, because a page
+       being torn down cannot reliably await a GET. That is exactly the write
+       that can clobber the other device. finishSession() already pushes safely,
+       and the next foreground interaction pushes again, so this one is dropped
+       rather than made dangerous. A brand-new gist has nothing to overwrite. */
+    if(Sync.configured()&&state.settings.autoSync&&!state.settings.gistId)Sync.push('unload');
+  }
   else if(document.visibilityState==='visible'&&view==='workout')holdWake(true);
 });
 window.addEventListener('resize',debounce(paintCharts,120));
