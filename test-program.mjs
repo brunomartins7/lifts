@@ -36,6 +36,8 @@ for (const d of days) {
   assert.equal(slots.length, 6, `day ${d.id} has ${slots.length} exercises, expected 6`);
   for (const sl of slots) {
     assert.equal(sl.options.length, 3, `a slot in day ${d.id} offers ${sl.options.length} options, expected 3`);
+    assert.ok(sl.rir != null && sl.rir >= 0 && sl.rir <= 4, `a slot in day ${d.id} has no usable reps-in-reserve target`);
+    assert.ok(sl.rest >= 30 && sl.rest <= 300, `a slot in day ${d.id} has no usable rest prescription`);
     for (const o of sl.options) {
       assert.ok(byId[o], `unknown exercise id ${o}`);
       assert.ok(!LEGS.includes(byId[o].muscle), `${o} is lower body — this programme is upper body only`);
@@ -51,7 +53,10 @@ for (const d of days) {
       `day ${d.id} puts incline straight after bench`);
   }
 }
-const AGREED = { back: 12, shoulders: 12, chest: 9, triceps: 6, biceps: 6, core: 6, forearms: 3 };
+/* The coached allocation. Lower than a naive 3x6 grid on purpose: where a muscle
+   can land on consecutive days it takes two or three sets at 2-3 reps in reserve,
+   which is what makes variable training days survivable. */
+const AGREED = { back: 11, shoulders: 11, chest: 6, biceps: 4, triceps: 4, core: 4, forearms: 2 };
 assert.deepEqual(tally, AGREED, `weekly direct sets drifted:\n  got ${JSON.stringify(tally)}\n  want ${JSON.stringify(AGREED)}`);
 
 /* ---- progression ---- */
