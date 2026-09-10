@@ -196,6 +196,7 @@ function freshState(){return{
             estRatios:[]},
   block:null,                       // {startDate, weeks} — advanced training block
   bodyLog:[],                       // [{date, kg}]
+  deleted:[],                       // [{id, at}] tombstones, so sync cannot resurrect a deletion
   session:null,
   sessions:[],
   lastReport:null,
@@ -284,6 +285,7 @@ function migrate(raw){
   n.program = repairProgram(n.program);
   n.block = (n.block && n.block.startDate) ? {startDate:String(n.block.startDate), weeks:clamp(Number(n.block.weeks)||4,2,8)} : null;
   n.bodyLog = Array.isArray(n.bodyLog)?n.bodyLog.filter(x=>x&&x.date):[];
+  n.deleted = Array.isArray(n.deleted)?n.deleted.filter(x=>x&&x.id):[];
   n.sessions = Array.isArray(n.sessions)?n.sessions:[];
   if (Array.isArray(n.sessionsLog) && !n.sessions.length){ // very old shape
     n.sessions = n.sessionsLog.map(s=>({id:s.id||uid(),date:s.date||today(),timestamp:s.timestamp||now(),day:s.day||'A',dayIndex:s.dayIndex||0,durationMin:s.durationMin||0,note:s.note||'',grade:s.grade||'BASE',overall:s.overall||null,entries:s.entries||{},prs:s.prs||[]}));
@@ -895,6 +897,14 @@ const Sync = {
         const prev = byId[s.id];
         if (!prev || (s.timestamp||0) >= (prev.timestamp||0)) byId[s.id] = s;
       }
+      /* Union by id has no way to express "this was deleted", so every sync
+         brought deleted sessions back from the other device. Tombstones are the
+         deletion record; they are unioned too, so both devices agree. */
+      const tombs = {};
+      for (const t of [...(r.deleted||[]), ...(state.deleted||[])]) if (t && t.id) tombs[t.id] = t;
+      const cutoff = now() - 180*86400000;
+      merged.deleted = Object.values(tombs).filter(t=>(t.at||0) > cutoff);
+      for (const t of merged.deleted) delete byId[t.id];
       merged.sessions = Object.values(byId).sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));
       // bodyLog: union by date so a weigh-in on one device is never overwritten by the other
       const bl = {};
@@ -1084,10 +1094,25 @@ function finishSession(force=false){
   if(c.done<c.total&&!force){confirmBox={title:'Finish with unlogged sets?',text:`${c.total-c.done} set${c.total-c.done===1?'':'s'} are not marked complete. Finish only if this is accurate.`,ok:'Finish anyway',danger:false,onYes:()=>finishSession(true)};render();return}
   const day=planDay(state.session.dayIndex);
   const entries={};
+  /* The draft is a prescription, not a record. It arrives pre-filled with target
+     reps, so saving it wholesale turned "finish anyway" into an invention: a
+     workout where nothing was logged still wrote a full set of targets into the
+     ledger, and that fictional volume then fed muscle scores, PR detection and
+     every progression target built on them. Only sets actually marked done are
+     saved, and an exercise with none is left out entirely rather than recorded
+     at its target. */
   for(const ex of sessionExercises(day)){
-    const d=state.session.draft[ex.id];
-    if(d&&d.predictedWeight)recordEstimateAccuracy(ex,d.predictedWeight,Number(d.weight)||0);
-    entries[ex.id]=normalizeEntry(ex,d);
+    const d=state.session.draft[ex.id]; if(!d) continue;
+    const done=state.session.setDone[ex.id]||[];
+    const performed=(d.reps||[]).filter((_,i)=>done[i]);
+    if(!performed.length) continue;
+    if(d.predictedWeight)recordEstimateAccuracy(ex,d.predictedWeight,Number(d.weight)||0);
+    entries[ex.id]=normalizeEntry(ex,{...d,reps:performed,warmups:(d.warmups||[]).filter(w=>w.done)});
+  }
+  if(!Object.keys(entries).length){
+    confirmBox=null; render();
+    flash('No sets were marked done, so there is nothing to save. Tap Log on the sets you completed.');
+    return;
   }
   const comp=compareToPrevious(state.session.dayIndex,entries);
   const prs=detectPRs(entries);
@@ -1110,6 +1135,7 @@ function deleteSession(id){
     const s=state.sessions.find(x=>x.id===id);
     state.trash={session:s,at:now()};
     state.sessions=state.sessions.filter(x=>x.id!==id);
+    state.deleted=[...(state.deleted||[]),{id,at:now()}];
     markDataChanged();save();confirmBox=null;render();
     flash('Session deleted.');
     const slot=document.getElementById('toast-slot');
@@ -1118,7 +1144,7 @@ function deleteSession(id){
   }};
   render();
 }
-function undoDelete(){if(!state.trash||!state.trash.session)return;state.sessions.push(state.trash.session);state.sessions.sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));state.trash=null;markDataChanged();save();render();flash('Session restored.')}
+function undoDelete(){if(!state.trash||!state.trash.session)return;const back=state.trash.session;state.deleted=(state.deleted||[]).filter(t=>t.id!==back.id);state.sessions.push(state.trash.session);state.sessions.sort((a,b)=>(a.timestamp||0)-(b.timestamp||0));state.trash=null;markDataChanged();save();render();flash('Session restored.')}
 function startEditSession(id){editingSessionId=id;view='editSession';jumpTop();render()}
 function saveEditSession(){
   const s=state.sessions.find(x=>x.id===editingSessionId);if(!s)return;
