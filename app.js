@@ -365,7 +365,10 @@ function listSnapshots(){
   }).filter(Boolean);
 }
 function latestSnapshot(){
-  const s = listSnapshots()[0];
+  /* listSnapshots() sorts by key, where "pre-reset" outranks every dated
+     snapshot alphabetically. Recovery has to take the genuinely newest. */
+  const newest = snapshotsOldestFirst().slice(-1)[0];
+  const s = newest ? listSnapshots().find(x=>x.key===newest.k) : listSnapshots()[0];
   if(!s) return null;
   try{ return {key:s.key, data:JSON.parse(STORAGE.getItem(s.key)).data}; }catch(_){ return null; }
 }
@@ -469,7 +472,12 @@ function exById(id){
   const inPlan = allExercises().find(x=>x.id===id); if(inPlan) return inPlan;
   if (state.exerciseIndex && state.exerciseIndex[id]) return {...state.exerciseIndex[id]};
   const b = BANK.find(x=>x.id===id); if(b) return {...b, sets:b.sets||3, startReps:b.min, goalReps:b.max, cues:b.cues||[]};
-  return allExercises()[0];
+  /* Falling back to the first exercise in the program credited an unrecognised
+     record to whatever happens to sit in slot one — wrong name, wrong muscle,
+     wrong score. Keep the id, mark it unknown, and let scoring skip it. */
+  return {id, name:`Unrecognised movement (${id})`, clip:'', muscle:'', type:'isolation',
+          equipment:'', sets:3, min:8, max:12, inc:2.5, startWeight:0, startReps:8,
+          goalWeight:0, goalReps:12, cues:[], unknown:true};
 }
 function planDay(i){return state.program[clamp(i,0,state.program.length-1)]}
 function epley(w,r){return w>0&&r>0?w*(1+r/30):0}
@@ -480,7 +488,7 @@ function baselineEntry(ex){return{weight:Number(ex.startWeight)||0,reps:Array.fr
 function goalEntry(ex){return{weight:Number(ex.goalWeight)||0,reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.goalReps)||ex.max)}}
 function averageEntry(ex){return{weight:Number(ex.averageWeight??ex.startWeight)||0,reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.averageReps??ex.startReps)||ex.min)}}
 function goalEst(ex){return Math.max(1,entryEst(ex,goalEntry(ex)))}
-function scoreFromEntry(ex,e){const ratio=clamp(entryEst(ex,e)/goalEst(ex),0,1.35);return Math.round(clamp(100*Math.pow(ratio,1.42),5,100))}
+function scoreFromEntry(ex,e){if(ex.unknown)return 0;const ratio=clamp(entryEst(ex,e)/goalEst(ex),0,1.35);return Math.round(clamp(100*Math.pow(ratio,1.42),5,100))}
 function volScore(ex,e){if(ex.scoreMode==='reps')return scoreFromEntry(ex,e);const g=volumeEntry(goalEntry(ex));const r=clamp(volumeEntry(e)/Math.max(1,g),0,1.35);return Math.round(clamp(100*Math.pow(r,.78),5,100))}
 function scoreColor(s){if(s>=90)return'var(--m5)';if(s>=75)return'var(--m4)';if(s>=60)return'var(--m3)';if(s>=45)return'var(--m2)';if(s>=30)return'var(--m1)';return'var(--m0)'}
 function rank(s){if(s>=90)return'Goal Range';if(s>=75)return'Advanced Track';if(s>=60)return'Intermediate Base';if(s>=45)return'Developing';if(s>=30)return'Beginner Base';return'Foundation Needed'}
@@ -925,6 +933,20 @@ const Sync = {
     if(!token) return false;
     if(!navigator.onLine){ this.setStatus('offline'); return false; }
     this.setStatus('syncing');
+    /* Writing without reading first lets a stale device replace sessions that
+       only exist in the cloud — logged on the phone, overwritten from the
+       laptop. Merge the remote in before serialising. Done inline rather than
+       through pull(), whose save() would schedule another push. */
+    if(gistId && reason!=='unload'){
+      try{
+        const cur = await fetch(`https://api.github.com/gists/${gistId}`,{headers:{Authorization:`Bearer ${token}`}});
+        if(cur.ok){
+          const j = await cur.json();
+          const f = j.files['brunian-lifts.json'] || Object.values(j.files)[0];
+          if(f && f.content){ const parsed = JSON.parse(f.content); this.merge(parsed.data||parsed); }
+        }
+      }catch(_){ /* unreadable remote: fall through and write ours */ }
+    }
     const body = {description:'Brunian Lifts ledger', public:false,
       files:{'brunian-lifts.json':{content:JSON.stringify({app:'Brunian Lifts',version:state.version,updatedAt:new Date().toISOString(),data:this.stripLocal(state)},null,1)}}};
     try{
@@ -1278,7 +1300,11 @@ function storageReport(){
   }else if(!synced){
     level='warn'; verdict='Nothing is logged yet, so nothing is at risk. Set up cloud sync before your first session and it never will be.';
   }else{
-    level='ok'; verdict=`Saved locally and mirrored to the cloud. ${sessions} session${sessions===1?'':'s'} on this device.`;
+    /* Holding a token is not the same as having uploaded anything. */
+    level=state.settings.lastSyncAt?'ok':'warn';
+    verdict=state.settings.lastSyncAt
+      ? `Saved here and uploaded to the cloud, last synced ${relTime(new Date(state.settings.lastSyncAt).getTime())}. ${sessions} session${sessions===1?'':'s'}.`
+      : 'Cloud sync is configured but has never completed a sync, so there is still no off-device copy. Press Save to cloud.';
   }
   return {level,verdict,raw:Boolean(raw),bytes:raw?raw.length:0,sessions,snaps,lastWrite,synced};
 }
