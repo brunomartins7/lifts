@@ -192,7 +192,8 @@ function freshState(){return{
   settings:{bodyweight:75,restSec:60,autoRest:true,soundOn:true,barWeight:20,
             advancedMode:false,
             lastExportAt:null,lastDataChangeAt:null,programUpdatedAt:null,
-            gistId:'',gistToken:'',autoSync:true,lastSyncAt:null,updatedAt:0},
+            gistId:'',gistToken:'',autoSync:true,lastSyncAt:null,updatedAt:0,
+            estRatios:[]},
   block:null,                       // {startDate, weeks} — advanced training block
   bodyLog:[],                       // [{date, kg}]
   session:null,
@@ -528,17 +529,58 @@ function targetEntry(ex){return targetFromLast(ex, latestEntryFor(ex))}
    history on the same muscle. Transfer the average progress between each
    movement's start and goal, preferring matching equipment. */
 function hasExerciseHistory(ex){return sessionsForEx(ex).length>0}
+/* Estimating the load for a movement he has never done.
+   The peer search now ranks on movement pattern as well as muscle, because a
+   fly and a press both read as "chest" while loading very differently, and it
+   takes the median of the best peers so one heavy outlier cannot drag the whole
+   estimate up. The result is then corrected by estimateBias(): whatever this
+   function predicts, the number he actually works with is the truth, and the app
+   should converge on him rather than on a table of population averages. */
 function muscleBasedTarget(ex){
   if(hasExerciseHistory(ex))return targetEntry(ex);
-  if(ex.scoreMode==='reps')return baselineEntry(ex);
-  const peers=[...new Map([...allExercises(),...BANK].map(x=>[x.id,x])).values()].filter(p=>p.id!==ex.id&&p.muscle===ex.muscle&&hasExerciseHistory(p)&&p.scoreMode!=='reps');
+  const reps=Array.from({length:Number(ex.sets)||3},()=>Number(ex.min)||8);
+  if(ex.scoreMode==='reps'||!(Number(ex.startWeight)>0))return baselineEntry(ex);
+  const pat=patternOf(ex);
+  const peers=[...new Map([...allExercises(),...BANK].map(x=>[x.id,x])).values()]
+    .filter(p=>p.id!==ex.id&&hasExerciseHistory(p)&&p.scoreMode!=='reps'&&Number(p.startWeight)>0&&Number(latestEntryFor(p).weight)>0);
   if(!peers.length)return baselineEntry(ex);
-  const ranked=peers.map(p=>{const e=latestEntryFor(p),span=Math.max(Number(p.inc)||2.5,(Number(p.goalWeight)||0)-(Number(p.startWeight)||0));return{p,progress:clamp(((Number(e.weight)||0)-(Number(p.startWeight)||0))/span,0,1),match:p.equipment===ex.equipment?1:0}}).sort((a,b)=>b.match-a.match);
-  const use=ranked.slice(0,3),progress=use.reduce((s,x)=>s+x.progress*(x.match?1.5:1),0)/use.reduce((s,x)=>s+(x.match?1.5:1),0);
-  const inc=Number(ex.inc)||2.5,start=Number(ex.startWeight)||0,goal=Math.max(start,Number(ex.goalWeight)||start);
-  const weight=Math.round((start+(goal-start)*progress)/inc)*inc;
-  return{weight:Number(weight.toFixed(1)),reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.min)||8),estimatedFromMuscle:true};
+  const scored=peers.map(p=>{
+    let score=0;
+    if(p.muscle===ex.muscle)score+=3;
+    if(pat&&patternOf(p)===pat)score+=3;
+    if(p.equipment===ex.equipment)score+=2;
+    if(p.type===ex.type)score+=1;
+    /* startWeight across the bank encodes the relative loading between
+       movements — barbell bench 20 against dumbbell bench 7.5 a hand — so the
+       ratio between two entries is a usable strength coefficient. */
+    return{score,est:(Number(latestEntryFor(p).weight)||0)*(Number(ex.startWeight)/Number(p.startWeight)),n:sessionsForEx(p).length};
+  }).filter(x=>x.score>0&&isFinite(x.est)&&x.est>0).sort((a,b)=>b.score-a.score||b.n-a.n);
+  if(!scored.length)return baselineEntry(ex);
+  const best=scored[0].score;
+  const use=scored.filter(x=>x.score>=best-2).slice(0,5).map(x=>x.est).sort((a,b)=>a-b);
+  const median=use.length%2?use[(use.length-1)/2]:(use[use.length/2-1]+use[use.length/2])/2;
+  const inc=Number(ex.inc)||2.5,startW=Number(ex.startWeight)||0,goal=Math.max(startW,Number(ex.goalWeight)||startW);
+  const weight=clamp(Math.round(median*estimateBias()/inc)*inc, inc, goal*1.5);
+  return{weight:Number(weight.toFixed(1)),reps,estimatedFromMuscle:true};
 }
+/* What the estimator has learned about this specific lifter. Every time a first
+   attempt at an estimated movement is logged, the ratio between what he actually
+   used and what was predicted is recorded; the median of those corrections
+   scales future estimates. Three sessions of evidence beat any population table. */
+function estimateBias(){
+  const r=(state.settings.estRatios||[]).filter(x=>isFinite(x)&&x>0);
+  if(r.length<2)return 1;
+  const v=r.slice(-10).sort((a,b)=>a-b);
+  const med=v.length%2?v[(v.length-1)/2]:(v[v.length/2-1]+v[v.length/2])/2;
+  return clamp(med,0.5,2);                    // refuse to learn something absurd
+}
+function recordEstimateAccuracy(ex,predicted,actual){
+  if(!(predicted>0)||!(actual>0))return;
+  const ratio=actual/predicted;
+  if(ratio<0.25||ratio>4)return;              // a typo, not a correction
+  state.settings.estRatios=[...(state.settings.estRatios||[]),Number(ratio.toFixed(3))].slice(-10);
+}
+
 function targetFromLast(ex,last){
   let weight=Number(last.weight)||0;
   const targetSets=Math.max(Number(ex.sets)||3,(last.reps||[]).length||0);
@@ -1005,7 +1047,11 @@ function finishSession(force=false){
   if(c.done<c.total&&!force){confirmBox={title:'Finish with unlogged sets?',text:`${c.total-c.done} set${c.total-c.done===1?'':'s'} are not marked complete. Finish only if this is accurate.`,ok:'Finish anyway',danger:false,onYes:()=>finishSession(true)};render();return}
   const day=planDay(state.session.dayIndex);
   const entries={};
-  for(const ex of sessionExercises(day))entries[ex.id]=normalizeEntry(ex,state.session.draft[ex.id]);
+  for(const ex of sessionExercises(day)){
+    const d=state.session.draft[ex.id];
+    if(d&&d.predictedWeight)recordEstimateAccuracy(ex,d.predictedWeight,Number(d.weight)||0);
+    entries[ex.id]=normalizeEntry(ex,d);
+  }
   const comp=compareToPrevious(state.session.dayIndex,entries);
   const prs=detectPRs(entries);
   comp.rawGrade=comp.grade;comp.grade=adjustGradeForSession(comp.grade,c.pct,entries);
@@ -1135,6 +1181,7 @@ function chooseFromBank(bankId){
     const suggestion=muscleBasedTarget(fresh);state.exerciseIndex[fresh.id]={...fresh};
     delete state.session.draft[base.id];delete state.session.setDone[base.id];
     state.session.exerciseSwaps=state.session.exerciseSwaps||{};state.session.exerciseSwaps[base.id]=fresh;
+    if(suggestion.estimatedFromMuscle)suggestion.predictedWeight=suggestion.weight;
     state.session.draft[fresh.id]=suggestion;state.session.setDone[fresh.id]=suggestion.reps.map(()=>false);
     save();bankTarget=null;view='workout';jumpTop();render();
     flash(suggestion.estimatedFromMuscle?`${fresh.name} ready — load estimated from your ${MUSCLE_LABEL[fresh.muscle].toLowerCase()} training.`:`${fresh.name} ready with your own history.`);return;
