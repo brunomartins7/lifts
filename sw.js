@@ -9,7 +9,7 @@
      "replace the file in the repo, same URL" update workflow still works;
      cache is only used as the offline fallback.
    ========================================================================== */
-const CACHE = 'brunian-lifts-shell-v9';
+const CACHE = 'brunian-lifts-shell-v10';
 /* CORE is atomic: if any of it fails to cache, the worker must not install,
    because a half-cached shell serves an app with no styles. Icons and the
    manifest are cosmetic, so they stay best-effort. */
@@ -53,9 +53,12 @@ self.addEventListener('fetch', e => {
         try { const c = await caches.open(CACHE); await c.put(req, res.clone()); }
         catch (_) { /* quota or eviction — the network response is still valid */ }
       }
+      // A 5xx is the host failing, not the user being offline. Falling through to
+      // the cached shell keeps the app usable when Pages has a bad minute.
+      if (!res.ok && res.status >= 500) throw new Error('HTTP ' + res.status);
       return res;
     } catch (_) {
-      const cached = await caches.match(req);         // offline: serve the cached shell
+      const cached = await caches.match(req);         // offline or a broken host: serve the cached shell
       if (cached) return cached;
       // Only a page navigation may fall back to index.html. Returning HTML for a
       // missing .css or .js hands the browser a document where it expects a

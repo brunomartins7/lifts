@@ -176,7 +176,11 @@ function clamp(x,a,b){return Math.max(a,Math.min(b,x))}
 function today(){return localDateKey(new Date())}
 function localDateKey(d){const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dd=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${dd}`}
 function fmtKg(n){return Number(n)===0?'BW':`${Number.isInteger(Number(n))?Number(n):Number(n).toFixed(1)}KG`}
-function fmtEntry(e){return `${fmtKg(e.weight)} · ${(e.reps||[]).join(', ')}`}
+function fmtEntry(e){
+  if(Array.isArray(e.weights)&&e.weights.length&&!e.weights.every(w=>w===e.weights[0]))
+    return (e.reps||[]).map((r,i)=>`${fmtKg(e.weights[i]??e.weight)}×${r}`).join(' · ');
+  return `${fmtKg(e.weight)} · ${(e.reps||[]).join(', ')}`;
+}
 function uid(){return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 function now(){return Date.now()}
 function dateDaysAgo(n){const d=new Date();d.setDate(d.getDate()-n);return localDateKey(d)}
@@ -485,8 +489,20 @@ function exById(id){
 function planDay(i){return state.program[clamp(i,0,state.program.length-1)]}
 function epley(w,r){return w>0&&r>0?w*(1+r/30):0}
 function bestReps(arr){return Math.max(0,...(arr||[]).map(Number).filter(x=>x>0))}
-function volumeEntry(e){return Math.max(0,Number(e.weight)||0)*(e.reps||[]).reduce((s,r)=>s+Math.max(0,Number(r)||0),0)}
-function entryEst(ex,e){return ex.scoreMode==='reps'?bestReps(e.reps):epley(Number(e.weight)||0,bestReps(e.reps))}
+function volumeEntry(e){
+  const reps=e.reps||[];
+  if(Array.isArray(e.weights)&&e.weights.length)
+    return reps.reduce((sum,r,i)=>sum+Math.max(0,Number(e.weights[i]??e.weight)||0)*Math.max(0,Number(r)||0),0);
+  return Math.max(0,Number(e.weight)||0)*reps.reduce((s,r)=>s+Math.max(0,Number(r)||0),0);
+}
+function entryEst(ex,e){
+  if(ex.scoreMode==='reps')return bestReps(e.reps);
+  /* With per-set loads the best single set is the estimate, not the heaviest
+     weight paired with the highest rep count from a different set. */
+  if(Array.isArray(e.weights)&&e.weights.length)
+    return Math.max(0,...(e.reps||[]).map((r,i)=>epley(Number(e.weights[i]??e.weight)||0,Number(r)||0)));
+  return epley(Number(e.weight)||0,bestReps(e.reps));
+}
 function baselineEntry(ex){return{weight:Number(ex.startWeight)||0,reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.startReps)||ex.min)}}
 function goalEntry(ex){return{weight:Number(ex.goalWeight)||0,reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.goalReps)||ex.max)}}
 function averageEntry(ex){return{weight:Number(ex.averageWeight??ex.startWeight)||0,reps:Array.from({length:Number(ex.sets)||3},()=>Number(ex.averageReps??ex.startReps)||ex.min)}}
@@ -497,7 +513,12 @@ function scoreColor(s){if(s>=90)return'var(--m5)';if(s>=75)return'var(--m4)';if(
 function rank(s){if(s>=90)return'Goal Range';if(s>=75)return'Advanced Track';if(s>=60)return'Intermediate Base';if(s>=45)return'Developing';if(s>=30)return'Beginner Base';return'Foundation Needed'}
 function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000)}
 
-function normalizeEntry(ex,e){const b=baselineEntry(ex);const raw=(e&&Array.isArray(e.reps)&&e.reps.length)?e.reps:b.reps;const reps=raw.slice(0,6).map(r=>clamp(Number(r)||0,0,100));while(reps.length<1)reps.push(Number(ex.min)||1);const warmups=Array.isArray(e&&e.warmups)?e.warmups.slice(0,3).map(w=>({weight:clamp(Number(w.weight)||0,0,500),reps:clamp(Number(w.reps)||0,0,100),done:Boolean(w.done)})):[];const out={weight:Number((e&&e.weight)??b.weight)||0,reps,warmups};if(e&&Array.isArray(e.rpe)&&e.rpe.some(x=>x>0)){out.rpe=reps.map((_,i)=>{const v=Number(e.rpe[i])||0;return v?clamp(v,5,10):0});}return out}
+function normalizeEntry(ex,e){const b=baselineEntry(ex);const raw=(e&&Array.isArray(e.reps)&&e.reps.length)?e.reps:b.reps;const reps=raw.slice(0,6).map(r=>clamp(Number(r)||0,0,100));while(reps.length<1)reps.push(Number(ex.min)||1);const warmups=Array.isArray(e&&e.warmups)?e.warmups.slice(0,3).map(w=>({weight:clamp(Number(w.weight)||0,0,500),reps:clamp(Number(w.reps)||0,0,100),done:Boolean(w.done)})):[];const out={weight:Number((e&&e.weight)??b.weight)||0,reps,warmups};
+  if(e&&Array.isArray(e.setWeights)&&e.setWeights.some(w=>Number(w)>0)){
+    out.weights=reps.map((_,i)=>{const w=Number(e.setWeights[i]);return isFinite(w)&&w>0?w:out.weight});
+    if(out.weights.every(w=>w===out.weights[0])) delete out.weights;   // only store it when it varies
+    else out.weight=Math.max(...out.weights);
+  }if(e&&Array.isArray(e.rpe)&&e.rpe.some(x=>x>0)){out.rpe=reps.map((_,i)=>{const v=Number(e.rpe[i])||0;return v?clamp(v,5,10):0});}return out}
 /* Mean logged RPE for a finished entries map (0 = none logged). */
 function entriesAvgRPE(entries){let s=0,n=0;for(const id in entries)for(const v of (entries[id].rpe||[]))if(v>0){s+=v;n++}return n?Math.round(s/n*10)/10:0}
 function normalizeSession(s,st){
@@ -539,6 +560,8 @@ function normalizeDraft(session, st){
   return {...session,draft,setDone,exerciseSwaps:swaps,extras:session.extras||[],removedExercises:session.removedExercises||[],note:session.note||'',startedAt:session.startedAt||now()};
 }
 
+/* The name a lift had when the set was performed, not the one it has now. */
+function exNameIn(session,id){ return (session&&session.meta&&session.meta[id]&&session.meta[id].name)||exById(id).name; }
 function sortedSessions(){return(state.sessions||[]).slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))}
 function sessionsForEx(ex){return sortedSessions().filter(s=>s.entries&&s.entries[ex.id]).map(s=>({session:s,entry:s.entries[ex.id]}))}
 function latestEntryFor(ex){const arr=sessionsForEx(ex);return arr.length?arr[arr.length-1].entry:baselineEntry(ex)}
@@ -744,11 +767,14 @@ function readinessInfo(){
   const ratio=acute/chronic;
   const rpes=logs.slice(-3).map(s=>Number(s.rpe)||0).filter(Boolean);
   const avgRpe=rpes.length?Math.round(rpes.reduce((a,b)=>a+b,0)/rpes.length*10)/10:null;
+  /* This is a workload-change reading, not a risk model. The causal reading of
+     acute:chronic ratios is not established, so it reports the change and stops
+     short of telling him whether he is allowed to train. */
   let status,label,advice;
-  if(ratio<0.8){status='fresh';label='Undertrained';advice='Load is well below your recent normal. You have room to push — add a session or extra sets this week.';}
-  else if(ratio<=1.3){status='optimal';label='In the zone';advice='This week\'s load sits in the sweet spot against your monthly base. Keep executing the plan.';}
-  else if(ratio<=1.5){status='elevated';label='Ramping fast';advice='Load is climbing faster than your base. Fine for a push week — watch sleep and rep quality.';}
-  else{status='high';label='High strain';advice='Acute load far exceeds your chronic base — injury-risk territory. Favour maintenance weights or a lighter session next.';}
+  if(ratio<0.8){status='fresh';label='Undertrained';advice='Your load this week is well below your recent normal. If you feel fresh, there is room for an extra session or a few more sets.';}
+  else if(ratio<=1.3){status='optimal';label='In the zone';advice='This week\'s load is close to your monthly base. Nothing here suggests changing anything.';}
+  else if(ratio<=1.5){status='elevated';label='Ramping fast';advice='Load is climbing faster than your recent base. That is normal in a push week; judge it by sleep and rep quality, not by this number.';}
+  else{status='high';label='Big jump in load';advice='This week is far above your recent base. That is a big jump in workload, which is worth knowing; it is not a prediction about injury, and the evidence linking this ratio to injury is contested.';}
   if(avgRpe&&avgRpe>=9&&(status==='optimal'||status==='elevated')){status='elevated';label='Grinding';advice=`Recent sessions averaged RPE ${avgRpe} — effort is near maximal. Bank an easier session before pushing loads again.`;}
   return{ready:true,ratio:Math.round(ratio*100)/100,acute:Math.round(acute),chronic:Math.round(chronic),status,label,advice,avgRpe};
 }
@@ -1111,6 +1137,12 @@ function logSet(exId,index){
   if(!state.session)return;
   const was=state.session.setDone[exId][index];
   state.session.setDone[exId][index]=!was;
+  /* One weight per exercise meant dropping from 30kg to 25kg recorded every set
+     at 25, and adding load recorded every set at the heaviest. Stamping the
+     weight as each set is logged captures what was actually lifted, with no new
+     control to operate mid-set. */
+  const d=state.session.draft[exId];
+  if(d){ d.setWeights=Array.isArray(d.setWeights)?d.setWeights:[]; if(!was) d.setWeights[index]=Number(d.weight)||0; }
   save();
   if(!was && state.settings.autoRest) startRest(state.settings.restSec||60);
   render();
@@ -1228,12 +1260,21 @@ function finishSession(force=false){
     const performed=(d.reps||[]).filter((_,i)=>done[i]);
     if(!performed.length) continue;
     if(d.predictedWeight)recordEstimateAccuracy(ex,d.predictedWeight,Number(d.weight)||0);
-    entries[ex.id]=normalizeEntry(ex,{...d,reps:performed,warmups:(d.warmups||[]).filter(w=>w.done)});
+    const perfWeights=Array.isArray(d.setWeights)?(d.reps||[]).map((_,i)=>d.setWeights[i]).filter((_,i)=>done[i]):null;
+    entries[ex.id]=normalizeEntry(ex,{...d,reps:performed,setWeights:perfWeights,warmups:(d.warmups||[]).filter(w=>w.done)});
   }
   if(!Object.keys(entries).length){
     confirmBox=null; render();
     flash('No sets were marked done, so there is nothing to save. Tap Log on the sets you completed.');
     return;
+  }
+  /* Renaming a lift, retuning its goal or switching program rewrote how old
+     sessions read, because history was displayed through whatever the exercise
+     means today. Store what it meant when it was performed. */
+  const meta={};
+  for(const id in entries){
+    const ex=exById(id); if(!ex||ex.unknown) continue;
+    meta[id]={name:ex.name,muscle:ex.muscle,equipment:ex.equipment,type:ex.type,min:ex.min,max:ex.max,scoreMode:ex.scoreMode};
   }
   const comp=compareToPrevious(state.session.dayIndex,entries);
   const prs=detectPRs(entries);
@@ -1242,7 +1283,7 @@ function finishSession(force=false){
   const before=computeProfile().overall;
   const timestamp=now();const date=today();const id=uid();
   markDataChanged();
-  state.sessions.push({id,date,timestamp,day:day.id,dayIndex:state.session.dayIndex,durationMin:Math.max(1,Math.round((timestamp-state.session.startedAt)/60000)),note:state.session.note||'',entries,prs,completion:c.pct,grade:comp.grade,overall:null,volume:totalVolumeForSessions([{entries}]),rpe:entriesAvgRPE(entries)||null});
+  state.sessions.push({id,date,timestamp,meta,updatedAt:timestamp,day:day.id,dayIndex:state.session.dayIndex,durationMin:Math.max(1,Math.round((timestamp-state.session.startedAt)/60000)),note:state.session.note||'',entries,prs,completion:c.pct,grade:comp.grade,overall:null,volume:totalVolumeForSessions([{entries}]),rpe:entriesAvgRPE(entries)||null});
   const overall=computeProfile().overall;
   state.sessions[state.sessions.length-1].overall=overall;
   state.currentDayIndex=(state.session.dayIndex+1)%state.program.length;
@@ -1441,7 +1482,7 @@ function download(name,text,type){const blob=new Blob([text],{type});const url=U
 function exportData(){state.settings.lastExportAt=new Date().toISOString();save();const payload=JSON.stringify({app:'Brunian Lifts',version:state.version,exportedAt:new Date().toISOString(),data:Sync.stripLocal(state)},null,2);download(`brunian-lifts-export-${today()}.json`,payload,'application/json');flash('Export file downloaded.')}
 function exportCSV(){
   const rows=[['date','day','exercise','muscle','set','weight_kg','reps','rpe','est_1rm']];
-  for(const s of sortedSessions())for(const id in s.entries){const ex=exById(id);const e=s.entries[id];(e.reps||[]).forEach((r,i)=>rows.push([s.date,s.day,ex.name,ex.muscle,i+1,e.weight,r,(e.rpe&&e.rpe[i])||'',Math.round(epley(e.weight,r)*10)/10]))}
+  for(const s of sortedSessions())for(const id in s.entries){const ex=exById(id);const m=(s.meta&&s.meta[id])||{};const e=s.entries[id];(e.reps||[]).forEach((r,i)=>{const w=(Array.isArray(e.weights)?e.weights[i]:undefined)??e.weight;rows.push([s.date,s.day,m.name||ex.name,m.muscle||ex.muscle,i+1,w,r,(e.rpe&&e.rpe[i])||'',Math.round(epley(w,r)*10)/10])})}
   download(`brunian-lifts-sessions-${today()}.csv`,rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv');
   flash('CSV downloaded.');
 }
@@ -1612,17 +1653,25 @@ function renderHeatmap(){
   return `<div class="card calendar-card"><div class="row calendar-title" style="padding-top:0"><div><strong>Training calendar</strong><div class="small faint">Completed workout dates · ${weekStreak()} week streak</div></div><div class="calendar-nav"><button class="cal-nav" data-action="calendar-prev" aria-label="Previous month">‹</button><span>${esc(label)}</span><button class="cal-nav" data-action="calendar-next" aria-label="Next month" ${calendarOffset>=0?'disabled':''}>›</button></div></div><div class="calendar-weekdays">${['M','T','W','T','F','S','S'].map(x=>`<span>${x}</span>`).join('')}</div><div class="training-calendar">${cells.join('')}</div><div class="calendar-key small faint"><span><i class="key-dot trained"></i>Trained</span><button data-action="calendar-current" ${calendarOffset===0?'disabled':''}>Current month</button></div></div>`;
 }
 
+/* The old version measured every muscle against a universal 10-20 set band and
+   hid any leg muscle the program did not train. Both were dishonest: ten sets is
+   not a biological pass mark, and a muscle you train zero times a week is the
+   single most useful thing this card could tell you. Every muscle is listed, and
+   the reference is what your own program prescribes, not a number from a paper. */
 function renderMuscleVolume(){
   const v=weeklyMuscleSets();
-  const inPlan=new Set(allExercises().map(ex=>ex.muscle));
-  const rows=MUSCLES.filter(m=>!LEG_MUSCLES.includes(m)||inPlan.has(m)||v[m]>0).map(m=>{
-    const sets=v[m],lo=10,hi=20,pct=clamp(sets/hi*100,0,100);
-    const tone=sets>=lo?(sets<=hi?'good':'high'):'low';
-    return `<div class="mv-row"><span class="mv-name">${MUSCLE_LABEL[m]}</span><span class="mv-bar"><i class="mv-band"></i><i class="mv-fill ${tone}" style="width:${pct}%"></i></span><span class="mv-num mono">${sets}</span></div>`;
+  const planned={};
+  for(const ex of uniqueExercises()) if(ex.muscle) planned[ex.muscle]=(planned[ex.muscle]||0)+(Number(ex.sets)||3);
+  const rows=MUSCLES.map(m=>{
+    const sets=v[m]||0, target=planned[m]||0;
+    const scale=Math.max(target,sets,1);
+    const tone=!target?'off':sets>=target*0.9?'good':sets>0?'low':'none';
+    const note=!target?'not in your program':`${sets} of ${target} prescribed`;
+    return `<div class="mv-row"><span class="mv-name">${MUSCLE_LABEL[m]}</span><span class="mv-bar"><i class="mv-band" style="width:${clamp(target/scale*100,0,100)}%"></i><i class="mv-fill ${tone}" style="width:${clamp(sets/scale*100,0,100)}%"></i></span><span class="mv-num mono" title="${esc(note)}">${sets}</span></div>`;
   }).join('');
-  return `<div class="card"><div class="row" style="padding-top:0"><div><strong>Weekly muscle volume</strong><div class="small faint">Hard sets, last 7 days. Band marks the 10–20 set range.</div></div></div><div class="mv">${rows}</div></div>`;
+  const untrained=MUSCLES.filter(m=>!planned[m]);
+  return `<div class="card"><div class="row" style="padding-top:0"><div><strong>Weekly muscle volume</strong><div class="small faint">Sets actually logged in the last 7 days. The pale marker is what your program prescribes for that muscle.</div></div></div><div class="mv">${rows}</div>${untrained.length?`<div class="small muted" style="margin-top:10px">Trained zero times a week: ${untrained.map(m=>MUSCLE_LABEL[m]).join(', ')}. That is a choice, not a gap the app can fill for you.</div>`:''}</div>`;
 }
-
 function renderTrainingTracker(){const set=new Set(state.sessions.map(s=>s.date));let dots='';for(let i=13;i>=0;i--){const d=dateDaysAgo(i);const done=set.has(d);const cls=done?'done':(i>0?'missed':'today');dots+=`<div class="tracker-dot ${cls}" title="${d}"></div>`}const s=trainingSummary();return`<div class="card"><div class="row" style="padding-top:0"><div><strong>Training tracker</strong><div class="small faint">Last session: ${s.last?`${s.last.date} · Day ${s.last.day}`:'None yet'}</div></div><div class="mono">Missed ${s.missed}</div></div><div class="tracker-days">${dots}</div></div>`}
 
 function renderTodayTargets(dayIndex){const day=planDay(dayIndex);const cards=day.groups.flatMap(g=>g.exercises).map(ex=>{const last=latestEntryFor(ex),target=targetEntry(ex),impact=targetImpact(ex);return`<div class="row"><div><strong>${esc(ex.name)}</strong><div class="small faint">Last: ${esc(fmtEntry(last))}</div><div class="small muted">Target: ${esc(fmtEntry(target))}</div></div><div class="mono" style="color:var(--gold2)">+${impact}</div></div>`}).join('');return`<div class="card"><div class="eyebrow">Today's target</div><div class="small muted" style="margin-top:7px">Beat these numbers to move the score. Targets come from your latest logged performance.</div>${cards}</div>`}
@@ -1708,7 +1757,7 @@ function renderExtraCard(){
 function renderWorkout(){
   const day=planDay(openDay),c=completion();
   const prevNote=previousSameDay(openDay)?.note;
-  return `<div class="shell has-finish"><div id="toast-slot">${renderToast()}</div>${renderHead('workout')}
+  return `<div class="shell has-finish no-anim"><div id="toast-slot">${renderToast()}</div>${renderHead('workout')}
   <button class="back" data-action="home">‹ Home</button>
   <div class="level-head" style="margin-top:8px"><div><div class="eyebrow">In session · <span id="sess-clock">${Math.floor((Date.now()-(state.session?.startedAt||Date.now()))/60000)} min</span></div><div class="title">Day ${day.id} <em>${esc(day.name)}</em></div></div><div class="pill">${c.done}/${c.total}</div></div>
   <div class="switcher">${state.program.map((d,i)=>`<button class="switch ${i===openDay?'active':''}" data-action="switch-day" data-day="${i}">${d.id}</button>`).join('')}</div>
@@ -1898,7 +1947,7 @@ function renderAchievements(){const ach=achievements(),groups=[...new Set(ach.ma
 
 function renderHistory(){
   const q=historyQuery.trim().toLowerCase();
-  const list=sortedSessions().slice().reverse().filter(s=>{if(!q)return true;const day=planDay(s.dayIndex);const names=Object.keys(s.entries).map(id=>exById(id).name).join(' ').toLowerCase();return s.date.includes(q)||String(s.day).toLowerCase().includes(q)||(day?.name||'').toLowerCase().includes(q)||names.includes(q)||(s.note||'').toLowerCase().includes(q)});
+  const list=sortedSessions().slice().reverse().filter(s=>{if(!q)return true;const day=planDay(s.dayIndex);const names=Object.keys(s.entries).map(id=>exNameIn(s,id)).join(' ').toLowerCase();return s.date.includes(q)||String(s.day).toLowerCase().includes(q)||(day?.name||'').toLowerCase().includes(q)||names.includes(q)||(s.note||'').toLowerCase().includes(q)});
   let lastMonth='';
   const rows=list.map(s=>{const m=s.date.slice(0,7);const head=m!==lastMonth?`<div class="month-head">${new Date(m+'-02').toLocaleString('en-GB',{month:'long',year:'numeric'})}</div>`:'';lastMonth=m;return head+`<div class="row"><div><strong>Day ${esc(s.day)} · ${esc(planDay(s.dayIndex)?.name||'')}</strong><div class="small faint">${esc(s.date)} · ${s.durationMin||0} min · ${s.completion||100}% · grade ${esc(s.grade||'—')}${s.volume?` · ${s.volume}KG vol`:''}${s.rpe?` · @${s.rpe}`:''}</div>${s.note?`<div class="small muted">“${esc(s.note)}”</div>`:''}</div><div class="session-actions"><button class="secondary" data-action="edit-session" data-id="${s.id}">Edit</button><button class="secondary danger" data-action="delete-session" data-id="${s.id}">Delete</button></div></div>`}).join('');
   return `<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('history')}<section class="hero"><div class="eyebrow">Session history</div><div class="title">Edit or delete logs</div><div class="sub">Deleting is confirmed and undoable for a few seconds. Scores always recompute from the remaining history.</div></section><input class="search" type="search" placeholder="Search by date, day, exercise or note" value="${esc(historyQuery)}" data-search="history"><div class="card flat">${rows||'<div class="small faint">No sessions match.</div>'}</div></div>`;
@@ -2056,7 +2105,25 @@ function render(){
     const keepPosition=view==='workout';const scrollY=keepPosition?window.scrollY:0;
     CHARTS.clear();
     const pages={home:renderHome,summary:renderSummary,weekly:renderWeekly,workout:renderWorkout,achievements:renderAchievements,history:renderHistory,editSession:renderEditSession,program:renderProgram,bank:renderBank,data:renderData,exercise:renderExerciseDetail,report:renderReport,prs:renderPRs,portfolio:renderPortfolio,analyst:renderAnalyst};
+    /* innerHTML destroys the focused control, so typing a rep count and having
+       any handler re-render moved the caret to nowhere. Remember the field by
+       its data attributes and put the caret back where it was. */
+    const act=document.activeElement;
+    const focusKey=act&&act.dataset&&(act.dataset.num||act.dataset.programField||act.dataset.search||act.dataset.syncField||act.dataset.setting)
+      ? JSON.stringify({n:act.dataset.num||'',e:act.dataset.ex||'',i:act.dataset.index||'',f:act.dataset.programField||'',s:act.dataset.search||'',y:act.dataset.syncField||'',t:act.dataset.setting||''})
+      : null;
+    const caret=focusKey&&typeof act.selectionStart==='number'?[act.selectionStart,act.selectionEnd]:null;
     app.innerHTML=(pages[view]||renderHome)()+renderConfirm();
+    if(focusKey){
+      const k=JSON.parse(focusKey);
+      const sel=k.n?`[data-num="${k.n}"][data-ex="${k.e}"]${k.i!==''?`[data-index="${k.i}"]`:''}`
+        :k.f?`[data-program-field="${k.f}"][data-ex="${k.e}"]`
+        :k.s?`[data-search="${k.s}"]`
+        :k.y?`[data-sync-field="${k.y}"]`
+        :`[data-setting="${k.t}"]`;
+      const el=document.querySelector(sel);
+      if(el){ try{ el.focus({preventScroll:true}); if(caret&&typeof el.setSelectionRange==='function') el.setSelectionRange(caret[0],caret[1]); }catch(_){} }
+    }
     paintCharts();
     if(keepPosition&&scrollY)requestAnimationFrame(()=>window.scrollTo(0,scrollY));
     crashed=false;
