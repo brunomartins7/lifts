@@ -518,11 +518,17 @@ function normalizeDraft(session, st){
     const ex=swaps[base.id]||base;
     draft[ex.id]=normalizeEntry(ex,(session.draft||{})[ex.id]||targetEntryIn(ex,S));
   }
-  const setDone={...(session.setDone||{})};
+  /* Spreading the old map forward kept a key for every exercise ever swapped
+     out of this session. Those keys are invisible on screen but were still
+     counted, so a fully logged workout could insist sets were outstanding.
+     Rebuild from the exercises actually in the session, carrying marks over. */
+  const prevDone=session.setDone||{};
+  const setDone={};
   for (const base of day.groups.flatMap(g=>g.exercises)){
     const ex=swaps[base.id]||base;
     const reps=draft[ex.id].reps||[];
-    setDone[ex.id]=Array.from({length:reps.length},(_,i)=>Boolean(setDone[ex.id]?.[i]));
+    const prev=prevDone[ex.id]||[];
+    setDone[ex.id]=Array.from({length:reps.length},(_,i)=>Boolean(prev[i]));
   }
   return {...session,draft,setDone,exerciseSwaps:swaps,removedExercises:session.removedExercises||[],note:session.note||'',startedAt:session.startedAt||now()};
 }
@@ -1086,7 +1092,24 @@ function addWarmup(exId){
 function removeWarmup(exId){if(!state.session)return;const d=state.session.draft[exId];if(!d||!Array.isArray(d.warmups)||!d.warmups.length){flash('No warmup set to remove.');return}d.warmups.pop();save();render()}
 function fillFromLast(exId){const d=draftFor(exId);if(!d)return;const ex=exById(exId);const last=latestEntryFor(ex);d.weight=Number(last.weight)||0;d.reps=(last.reps||[]).slice(0,6).map(Number);state.session.setDone[exId]=d.reps.map(()=>false);save();render();flash('Filled with your last logged numbers.')}
 function fillFromTarget(exId){const d=draftFor(exId);if(!d)return;const ex=exById(exId);const t=targetEntry(ex);d.weight=t.weight;d.reps=t.reps.slice();state.session.setDone[exId]=d.reps.map(()=>false);save();render();flash('Filled with today\'s target.')}
-function completion(){if(!state.session)return{done:0,total:0,pct:0};let done=0,total=0;for(const id in state.session.setDone){for(const v of state.session.setDone[id]){total++;if(v)done++}}for(const id in state.session.draft){for(const w of (state.session.draft[id].warmups||[])){total++;if(w.done)done++}}for(const id of (state.session.removedExercises||[])){const ex=exById(id);total+=Number(ex.sets)||3}return{done,total,pct:total?Math.round(done/total*100):0}}
+/* Count what is actually in front of him. Iterating the setDone and draft maps
+   counted stale keys from swapped-out exercises, and counted an exercise removed
+   for today twice — once from its lingering marks and again from the explicit
+   penalty below. sessionExercises() already excludes removed lifts. */
+function completion(){
+  if(!state.session)return{done:0,total:0,pct:0};
+  let done=0,total=0;
+  for(const ex of sessionExercises()){
+    const d=state.session.draft[ex.id]; if(!d)continue;
+    const marks=state.session.setDone[ex.id]||[];
+    (d.reps||[]).forEach((_,i)=>{total++;if(marks[i])done++});
+    for(const w of (d.warmups||[])){total++;if(w.done)done++}
+  }
+  /* A lift dropped for today still owes its planned sets, so the grade reflects
+     the choice. Counted once, here. */
+  for(const id of (state.session.removedExercises||[])){const ex=exById(id);total+=Number(ex.sets)||3}
+  return{done,total,pct:total?Math.round(done/total*100):0};
+}
 
 function finishSession(force=false){
   if(!state.session)return;
