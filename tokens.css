@@ -31,7 +31,7 @@
   --ink:#F2EFE7;
   --ink2:#C9C3B4;
   --muted:#98A0AE;
-  --faint:#69707E;
+  --faint:#8A92A1;                  /* was #69707E: 3.6:1 on --panel, unreadable */
 
   /* ---- gold: the accent, and the only data chroma ---- */
   --gold:#D9A94E;

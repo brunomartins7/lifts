@@ -531,7 +531,12 @@ function normalizeDraft(session, st){
     const prev=prevDone[ex.id]||[];
     setDone[ex.id]=Array.from({length:reps.length},(_,i)=>Boolean(prev[i]));
   }
-  return {...session,draft,setDone,exerciseSwaps:swaps,removedExercises:session.removedExercises||[],note:session.note||'',startedAt:session.startedAt||now()};
+  for(const x of (session.extras||[])){
+    draft[x.id]=normalizeEntry(x,(session.draft||{})[x.id]||targetEntryIn(x,S));
+    const prevX=(session.setDone||{})[x.id]||[];
+    setDone[x.id]=Array.from({length:(draft[x.id].reps||[]).length},(_,i)=>Boolean(prevX[i]));
+  }
+  return {...session,draft,setDone,exerciseSwaps:swaps,extras:session.extras||[],removedExercises:session.removedExercises||[],note:session.note||'',startedAt:session.startedAt||now()};
 }
 
 function sortedSessions(){return(state.sessions||[]).slice().sort((a,b)=>(a.timestamp||0)-(b.timestamp||0))}
@@ -880,9 +885,38 @@ function detectPRs(entries){const prs=[];for(const id in entries){const ex=exByI
 function fatigueWarnings(entries){const out=[];for(const id in entries){const ex=exById(id),r=entries[id].reps||[];if(r.length>=2&&r[0]>0){const drop=(r[0]-r[r.length-1])/r[0];if(drop>=.30)out.push(`${ex.name} dropped from ${r[0]} reps to ${r[r.length-1]}. Rest longer, lower the load slightly, or stop one rep earlier on set one.`)}}return out}
 function gradeIndex(g){return ['F','D','C','B','A','S'].indexOf(g)}
 function gradeFromIndexNum(i){return ['F','D','C','B','A','S'][clamp(i,0,5)]||'C'}
-function adjustGradeForSession(grade,completionPct,entries){let i=gradeIndex(grade);if(i<0)return grade;const warmups=Object.values(entries).flatMap(e=>e.warmups||[]);const warmDone=warmups.filter(w=>w.done).length;if(completionPct<100)i--;if(completionPct<85)i--;if(warmups.length&&warmDone===warmups.length)i++;if(warmups.length&&warmDone<warmups.length)i--;return gradeFromIndexNum(i)}
+/* Whether the session was still the session it was meant to be. Swapping a back
+   exercise for a curl leaves the day's planned back volume unworked and piles
+   the sets somewhere they were not needed. Load progression alone cannot see
+   that — every lift can improve while the day trains the wrong thing. */
+function sessionBalance(dayIndex,entries){
+  const planned={},actual={};
+  for(const ex of planDay(dayIndex).groups.flatMap(g=>g.exercises)){
+    if(!ex.muscle) continue;
+    planned[ex.muscle]=(planned[ex.muscle]||0)+(Number(ex.sets)||3);
+  }
+  for(const id in entries){
+    const ex=exById(id); if(!ex||ex.unknown||!ex.muscle) continue;
+    actual[ex.muscle]=(actual[ex.muscle]||0)+((entries[id].reps||[]).length);
+  }
+  const missed=Object.keys(planned).filter(m=>!(actual[m]>0));
+  const unplanned=Object.keys(actual).filter(m=>!planned[m]);
+  /* Doubling a muscle the day already covered is not the same failure as
+     abandoning one, so it only counts when something else went untrained. */
+  const penalty=missed.length + (missed.length&&unplanned.length?1:0);
+  return {missed,unplanned,penalty};
+}
+function balanceNote(bal){
+  if(!bal.penalty) return '';
+  const label=m=>MUSCLE_LABEL[m]||m;
+  const gone=bal.missed.map(label).join(' and ');
+  if(bal.unplanned.length)
+    return `Graded down: this day was built to train ${gone}, and none of it was worked — the sets went to ${bal.unplanned.map(label).join(' and ')} instead.`;
+  return `Graded down: ${gone} was on the plan for today and got no work.`;
+}
+function adjustGradeForSession(grade,completionPct,entries,balance){let i=gradeIndex(grade);if(i<0)return grade;const warmups=Object.values(entries).flatMap(e=>e.warmups||[]);const warmDone=warmups.filter(w=>w.done).length;if(completionPct<100)i--;if(completionPct<85)i--;if(warmups.length&&warmDone===warmups.length)i++;if(warmups.length&&warmDone<warmups.length)i--;if(balance&&balance.penalty)i-=balance.penalty;return gradeFromIndexNum(i)}
 function workoutFeedback(dayIndex,entries,comp,prs){const tips=[];const warnings=fatigueWarnings(entries);tips.push(...warnings.slice(0,2));const low=Object.keys(entries).map(id=>({ex:exById(id),e:entries[id]})).filter(x=>Math.min(...x.e.reps)<x.ex.min).sort((a,b)=>Math.min(...a.e.reps)-Math.min(...b.e.reps))[0];if(low)tips.push(`${low.ex.name} fell below the programmed rep floor. Use ${fmtKg(low.e.weight)} until every set reaches at least ${low.ex.min} reps.`);const ready=Object.keys(entries).map(id=>({ex:exById(id),e:entries[id]})).find(x=>x.e.reps.every(r=>r>=x.ex.max)&&x.ex.scoreMode!=='reps');if(ready)tips.push(`${ready.ex.name} is ready for a load increase next time. Move from ${fmtKg(ready.e.weight)} to ${fmtKg(Number(ready.e.weight)+Number(ready.ex.inc||2.5))} and restart near ${ready.ex.min} reps.`);const weak=Object.keys(entries).map(id=>({ex:exById(id),score:scoreFromEntry(exById(id),entries[id])})).sort((a,b)=>a.score-b.score)[0];if(weak)tips.push(`Lowest session score was ${weak.ex.name}. Next target: ${fmtEntry(targetEntry(weak.ex))}.`);const warmups=Object.values(entries).flatMap(e=>e.warmups||[]);if(warmups.length&&warmups.some(w=>!w.done))tips.push('You added warmup sets but did not log all of them. Warmup completion affects the final grade because it improves data quality and session execution.');const extra=Object.keys(entries).map(id=>({ex:exById(id),e:entries[id]})).find(x=>(x.e.reps||[]).length>x.ex.sets);if(extra)tips.push(`${extra.ex.name} included extra work sets. That can help volume score, but only keep it if recovery stays consistent next session.`);if(prs&&prs.length)tips.push(`Keep the same technique on new PR lifts. Do not raise load again until the next session confirms the performance.`);while(tips.length<3)tips.push('Complete every set before finishing. Missing sets reduce data quality and make scores less trustworthy.');return tips.slice(0,4)}
-function gradeReason(comp,first,completionPct){if(first)return'Baseline session. Future grades compare this day against the previous matching day.';return`${comp.up} lifts improved, ${comp.held} held steady and ${comp.down} regressed. Completion was ${completionPct}%. ${comp.grade!==comp.rawGrade&&comp.rawGrade?'Final grade adjusted for completion, added work sets or warmup execution.':''}`}
+function gradeReason(comp,first,completionPct,balance){const bal=balance?balanceNote(balance):'';if(first)return'Baseline session. Future grades compare this day against the previous matching day.'+(bal?' '+bal:'');return`${comp.up} lifts improved, ${comp.held} held steady and ${comp.down} regressed. Completion was ${completionPct}%. ${bal||(comp.grade!==comp.rawGrade&&comp.rawGrade?'Final grade adjusted for completion, added work sets or warmup execution.':'')}`}
 
 /* ========================== 5. SYNC (GitHub Gist, auto) =================== */
 const Sync = {
@@ -902,7 +936,11 @@ const Sync = {
       const byId = {};
       for (const s of [...r.sessions, ...state.sessions]) {
         const prev = byId[s.id];
-        if (!prev || (s.timestamp||0) >= (prev.timestamp||0)) byId[s.id] = s;
+        /* timestamp is when the workout happened, which an edit never changes,
+           so a correction always tied with its stale twin and local won. Rank on
+           the revision first, and only fall back to when it was trained. */
+        const rev=x=>Number(x.updatedAt||0), when=x=>Number(x.timestamp||0);
+        if (!prev || rev(s)>rev(prev) || (rev(s)===rev(prev) && when(s)>=when(prev))) byId[s.id] = s;
       }
       /* Union by id has no way to express "this was deleted", so every sync
          brought deleted sessions back from the other device. Tombstones are the
@@ -1027,9 +1065,9 @@ function flash(msg){toast=msg;clearTimeout(toastTimer);toastTimer=setTimeout(()=
 function jumpTop(){try{window.scrollTo(0,0)}catch(_){}}
 function go(v){view=v;jumpTop();render()}
 
-function buildDraft(dayIndex){const day=planDay(dayIndex);const draft={};const done={};const deload=inDeload();for(const ex of day.groups.flatMap(g=>g.exercises)){const t=targetEntry(ex);draft[ex.id]=deload?deloadEntry(ex,t):t;done[ex.id]=Array.from({length:Number(ex.sets)||3},()=>false)}return{dayIndex,draft,setDone:done,startedAt:now(),note:'',exerciseSwaps:{},removedExercises:[]}}
+function buildDraft(dayIndex){const day=planDay(dayIndex);const draft={};const done={};const deload=inDeload();for(const ex of day.groups.flatMap(g=>g.exercises)){const t=targetEntry(ex);draft[ex.id]=deload?deloadEntry(ex,t):t;done[ex.id]=Array.from({length:Number(ex.sets)||3},()=>false)}return{dayIndex,draft,setDone:done,startedAt:now(),note:'',exerciseSwaps:{},extras:[],removedExercises:[]}}
 function sessionExercise(ex){return state.session?.exerciseSwaps?.[ex.id]||ex}
-function sessionExercises(day=planDay(state.session?.dayIndex||0)){return day.groups.flatMap(g=>g.exercises.map(sessionExercise)).filter(ex=>!state.session?.removedExercises?.includes(ex.id))}
+function sessionExercises(day=planDay(state.session?.dayIndex||0)){return day.groups.flatMap(g=>g.exercises.map(sessionExercise)).filter(ex=>!state.session?.removedExercises?.includes(ex.id)).concat((state.session?.extras||[]).map(x=>({...x,isExtra:true})))}
 function cycleRPE(exId,index){
   const d=draftFor(exId); if(!d)return;
   d.rpe=Array.isArray(d.rpe)?d.rpe:(d.reps||[]).map(()=>0);
@@ -1101,6 +1139,7 @@ function completion(){
   if(!state.session)return{done:0,total:0,pct:0};
   let done=0,total=0;
   for(const ex of sessionExercises()){
+    if(ex.isExtra) continue;           // a bonus lift cannot expand the denominator
     const d=state.session.draft[ex.id]; if(!d)continue;
     const marks=state.session.setDone[ex.id]||[];
     (d.reps||[]).forEach((_,i)=>{total++;if(marks[i])done++});
@@ -1112,6 +1151,64 @@ function completion(){
   return{done,total,pct:total?Math.round(done/total*100):0};
 }
 
+/* What is worth doing with the time left, decided from how this session actually
+   went rather than from enthusiasm. Rank order: a muscle this day was built to
+   train that ended up with nothing, then the muscle your week has least of,
+   then nothing at all — "enough" is a valid answer and the common one. */
+function performedEntries(){
+  const out={};
+  if(!state.session) return out;
+  for(const ex of sessionExercises()){
+    const d=state.session.draft[ex.id]; if(!d) continue;
+    const done=state.session.setDone[ex.id]||[];
+    const reps=(d.reps||[]).filter((_,i)=>done[i]);
+    if(reps.length) out[ex.id]={...d,reps};
+  }
+  return out;
+}
+function extraSuggestions(){
+  if(!state.session) return null;
+  if(inDeload()) return {suppress:'You are in a deload. Adding volume now defeats the point of it.'};
+  const c=completion();
+  if(!c.total||c.done<c.total*0.8) return {suppress:'Finish the sets you already have before adding more.'};
+  const entries=performedEntries();
+  const bal=sessionBalance(state.session.dayIndex,entries);
+  const active=new Set(sessionExercises().map(x=>x.id));
+  const pick=(muscle,n)=>{
+    const inProgram=uniqueExercises().filter(e=>e.muscle===muscle&&!active.has(e.id));
+    const fromBank=BANK.filter(b=>b.muscle===muscle&&!active.has(b.id)&&b.type==='isolation');
+    return [...inProgram,...fromBank].filter((x,i,a)=>a.findIndex(y=>y.id===x.id)===i).slice(0,n);
+  };
+  if(bal.missed.length){
+    const m=bal.missed[0];
+    const list=pick(m,3);
+    if(list.length) return {reason:`${MUSCLE_LABEL[m]||m} was on today's plan and got no work. This is the gap worth closing.`,list,muscle:m};
+  }
+  const weekly=weeklyMuscleSets();
+  const trained=[...new Set(uniqueExercises().map(e=>e.muscle).filter(Boolean))];
+  const thin=trained.map(m=>({m,sets:weekly[m]||0})).sort((a,b)=>a.sets-b.sets)[0];
+  if(thin&&thin.sets<6){
+    const list=pick(thin.m,3);
+    if(list.length) return {reason:`${MUSCLE_LABEL[thin.m]||thin.m} has had ${thin.sets} set${thin.sets===1?'':'s'} in the last seven days, the least of anything you train.`,list,muscle:thin.m};
+  }
+  return {enough:'Today covered what it was meant to. Extra sets now cost recovery you will want for the next session.'};
+}
+function addExtraExercise(bankId){
+  if(!state.session) return;
+  const b=BANK.find(x=>x.id===bankId)||uniqueExercises().find(x=>x.id===bankId);
+  if(!b) return;
+  if(sessionExercises().some(x=>x.id===b.id)){flash('That exercise is already in this workout.');return}
+  const fresh={...b,sets:2,startReps:b.min,goalReps:b.max,cues:b.cues||[]};
+  const t=muscleBasedTarget(fresh);
+  if(t.estimatedFromMuscle)t.predictedWeight=t.weight;
+  t.reps=t.reps.slice(0,2);
+  state.session.extras=[...(state.session.extras||[]),fresh];
+  state.exerciseIndex[fresh.id]={...fresh};
+  state.session.draft[fresh.id]=t;
+  state.session.setDone[fresh.id]=t.reps.map(()=>false);
+  save();render();
+  flash(`${fresh.name} added as extra work. It does not count against your grade.`);
+}
 function finishSession(force=false){
   if(!state.session)return;
   const c=completion();
@@ -1140,7 +1237,8 @@ function finishSession(force=false){
   }
   const comp=compareToPrevious(state.session.dayIndex,entries);
   const prs=detectPRs(entries);
-  comp.rawGrade=comp.grade;comp.grade=adjustGradeForSession(comp.grade,c.pct,entries);
+  const balance=sessionBalance(state.session.dayIndex,entries);
+  comp.rawGrade=comp.grade;comp.grade=adjustGradeForSession(comp.grade,c.pct,entries,balance);
   const before=computeProfile().overall;
   const timestamp=now();const date=today();const id=uid();
   markDataChanged();
@@ -1148,7 +1246,7 @@ function finishSession(force=false){
   const overall=computeProfile().overall;
   state.sessions[state.sessions.length-1].overall=overall;
   state.currentDayIndex=(state.session.dayIndex+1)%state.program.length;
-  state.lastReport={id,dayId:day.id,grade:comp.grade,overall,delta:overall-before,comp,prs,first:comp.first,completion:c.pct,durationMin:state.sessions[state.sessions.length-1].durationMin,volume:state.sessions[state.sessions.length-1].volume,rpe:state.sessions[state.sessions.length-1].rpe,narrative:comp.first?'Baseline saved. The next matching day will be graded against this workout.':overall>=before?'Workout saved. Your current profile improved or held after this session.':'Workout saved. Some performance dropped, so the current profile adjusted downward.',reason:gradeReason(comp,comp.first,c.pct),feedback:workoutFeedback(state.session.dayIndex,entries,comp,prs)};
+  state.lastReport={id,dayId:day.id,grade:comp.grade,overall,delta:overall-before,comp,prs,first:comp.first,completion:c.pct,durationMin:state.sessions[state.sessions.length-1].durationMin,volume:state.sessions[state.sessions.length-1].volume,rpe:state.sessions[state.sessions.length-1].rpe,narrative:comp.first?'Baseline saved. The next matching day will be graded against this workout.':overall>=before?'Workout saved. Your current profile improved or held after this session.':'Workout saved. Some performance dropped, so the current profile adjusted downward.',balance,reason:gradeReason(comp,comp.first,c.pct,balance),feedback:workoutFeedback(state.session.dayIndex,entries,comp,prs)};
   state.session=null;openDay=state.currentDayIndex;view='report';confirmBox=null;
   clearRest(); holdWake(false); snapshot();
   save(); if(Sync.configured()&&state.settings.autoSync)Sync.push('finish');
@@ -1176,12 +1274,26 @@ function saveEditSession(){
     const ex=exById(id);
     const w=document.querySelector(`[data-edit-weight="${id}"]`);if(!w)continue;
     const reps=[...document.querySelectorAll(`[data-edit-rep^="${id}-"]`)].map(r=>clamp(Number(r.value||0),0,100));
-    s.entries[id]={weight:clamp(Number(w.value||0),0,500),reps:reps.length?reps:baselineEntry(ex).reps,warmups:(s.entries[id]?.warmups||[])};
+    const prev=s.entries[id]||{};
+    /* The edit form only exposes weight and reps. Rebuilding the entry from
+       those two fields silently deleted per-set effort, which is not something
+       the user asked to change. */
+    const next={weight:clamp(Number(w.value||0),0,500),reps:reps.length?reps:baselineEntry(ex).reps,warmups:(prev.warmups||[])};
+    if(Array.isArray(prev.rpe)&&prev.rpe.some(x=>x>0)) next.rpe=next.reps.map((_,i)=>Number(prev.rpe[i])||0);
+    s.entries[id]=next;
   }
   const note=document.querySelector('[data-edit-note]');if(note)s.note=note.value;
   s.timestamp=s.timestamp||now();s.date=s.date||today();
   markDataChanged();
+  /* Volume, PRs and average effort were all computed at finish time and left
+     untouched by an edit, so a corrected session kept reporting the old numbers
+     everywhere except the entry itself. Rebuild what the entries determine. */
+  s.volume=totalVolumeForSessions([{entries:s.entries}]);
+  s.rpe=entriesAvgRPE(s.entries)||null;
+  s.updatedAt=now();
   s.overall=profileUpTo(s.timestamp).overall;
+  /* Every later session's snapshot of the profile depends on this one. */
+  for(const later of sortedSessions()) if((later.timestamp||0)>(s.timestamp||0)) later.overall=profileUpTo(later.timestamp).overall;
   save();view='history';editingSessionId=null;render();flash('Session updated. Scores recomputed.');
 }
 
@@ -1264,8 +1376,25 @@ function chooseFromBank(bankId){
   if(bankTarget.sessionOnly){
     const base=planDay(state.session.dayIndex).groups.find(g=>g.id===bankTarget.groupId)?.exercises.find(x=>x.id===bankTarget.replaceId);if(!base)return;
     if(sessionExercises().some(x=>x.id===b.id)){flash('That exercise is already in this workout.');return}
+    /* replaceId is always the ORIGINAL program slot, so a second swap deleted a
+       key that had already gone and left the first replacement's draft behind:
+       invisible on screen, still counted, never completable. Clear whatever is
+       currently occupying the slot as well as the base. */
+    const current=state.session.exerciseSwaps?.[base.id];
+    const occupant=current&&current.id?current.id:base.id;
+    const loggedOnOccupant=(state.session.setDone[occupant]||[]).filter(Boolean).length;
+    if(loggedOnOccupant&&!bankTarget.confirmedDiscard){
+      const name=exById(occupant).name;
+      const target={...bankTarget,confirmedDiscard:true};
+      confirmBox={title:'Discard logged sets?',
+        text:`You have ${loggedOnOccupant} logged set${loggedOnOccupant===1?'':'s'} on ${name}. Swapping now throws that work away — it has not been saved to your log yet.`,
+        ok:'Swap and discard',danger:true,
+        onYes:()=>{confirmBox=null;bankTarget=target;chooseFromBank(bankId)}};
+      render();return;
+    }
     const fresh={...b,sets:base.sets||3,startReps:b.min,goalReps:b.max,cues:b.cues||[]};
     const suggestion=muscleBasedTarget(fresh);state.exerciseIndex[fresh.id]={...fresh};
+    if(occupant!==base.id){delete state.session.draft[occupant];delete state.session.setDone[occupant];}
     delete state.session.draft[base.id];delete state.session.setDone[base.id];
     state.session.exerciseSwaps=state.session.exerciseSwaps||{};state.session.exerciseSwaps[base.id]=fresh;
     if(suggestion.estimatedFromMuscle)suggestion.predictedWeight=suggestion.weight;
@@ -1316,7 +1445,18 @@ function exportCSV(){
   download(`brunian-lifts-sessions-${today()}.csv`,rows.map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv');
   flash('CSV downloaded.');
 }
-function importData(){const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=()=>{const file=input.files&&input.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result||'{}'));snapshot('pre-import');const keepToken=state.settings.gistToken,keepId=state.settings.gistId;state=migrate(parsed.data||parsed);state.settings.gistToken=state.settings.gistToken||keepToken;state.settings.gistId=state.settings.gistId||keepId;openDay=state.session?state.session.dayIndex:state.currentDayIndex;view=state.session?'workout':'home';save();jumpTop();render();flash('Import complete.')}catch(_){flash('Import failed. Use a Brunian Lifts JSON export file.')}};reader.readAsText(file)};input.click()}
+/* An object is not a ledger. Accepting any parseable JSON meant an unrelated
+   file could replace a whole training history with nothing, while keeping the
+   sync credentials so the empty result was uploaded over the good copy. */
+function looksLikeLedger(d){
+  if(!d||typeof d!=='object') return 'That file is not a Brunian Lifts export.';
+  const sessions=d.sessions||d.sessionsLog;
+  if(!Array.isArray(sessions)) return 'That file has no sessions list, so it is not an export from this app.';
+  if(!Array.isArray(d.program)&&!d.settings) return 'That file has no program or settings, so it is not an export from this app.';
+  if(sessions.length&&!sessions.every(x=>x&&typeof x==='object'&&x.entries)) return 'That file has a sessions list, but the records are not workouts.';
+  return '';
+}
+function importData(){const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=()=>{const file=input.files&&input.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result||'{}'));const payload=parsed.data||parsed;const bad=looksLikeLedger(payload);if(bad){flash(bad);return}snapshot('pre-import');const keepToken=state.settings.gistToken,keepId=state.settings.gistId;state=migrate(payload);state.settings.gistToken=state.settings.gistToken||keepToken;state.settings.gistId=state.settings.gistId||keepId;openDay=state.session?state.session.dayIndex:state.currentDayIndex;view=state.session?'workout':'home';save();jumpTop();render();flash('Import complete.')}catch(_){flash('Import failed. Use a Brunian Lifts JSON export file.')}};reader.readAsText(file)};input.click()}
 function resetAll(){confirmBox={title:'Reset all local data?',text:'This clears sessions, draft, scores and settings from this device. A pre-reset snapshot is kept and export is recommended first.',ok:'Reset everything',danger:true,onYes:()=>{snapshot('pre-reset');try{[KEY,...LEGACY].forEach(k=>STORAGE.removeItem(k))}catch(_){}state=freshState();openDay=0;view='home';confirmBox=null;save();render();flash('Local data reset. A pre-reset snapshot was kept.')}};render()}
 
 /* A probe of the IndexedDB mirror, filled in once at boot. Rendering cannot wait
@@ -1436,7 +1576,7 @@ function renderHead(active){
   const tabs=[['home','Home','home'],['summary','Summary','chart'],['weekly','Coach','coach'],['history','Log','log'],['data','Data','data']];
   const b=blockInfo();
   const blockChip=(state.settings.advancedMode&&b&&!b.done)?`<button class="sync-chip blk" data-action="weekly" title="Training block">${esc(b.phase)} · wk ${b.week}/${b.weeks}</button>`:'';
-  return `<div class="head"><div class="appbar"><div class="brand"><div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12h2M19.5 12h2M6.5 12h11" stroke-width="1.8" stroke-linecap="round"/><rect x="4.5" y="7.5" width="2" height="9" rx="1"/><rect x="17.5" y="7.5" width="2" height="9" rx="1"/><rect x="8" y="5.5" width="2.2" height="13" rx="1.1"/><rect x="13.8" y="5.5" width="2.2" height="13" rx="1.1"/></svg></div><div class="brand-copy"><div class="bt">Brunian <span>Lifts</span></div><div class="bs">${renderSyncChip()}${blockChip}</div></div></div><div class="ovr-mini" title="Overall score"><span>OVR</span><b style="color:${scoreColor(ovr)}">${ovr}</b></div></div></div>
+  return `<div class="head"><div class="appbar"><div class="brand"><div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 12h2M19.5 12h2M6.5 12h11" stroke-width="1.8" stroke-linecap="round"/><rect x="4.5" y="7.5" width="2" height="9" rx="1"/><rect x="17.5" y="7.5" width="2" height="9" rx="1"/><rect x="8" y="5.5" width="2.2" height="13" rx="1.1"/><rect x="13.8" y="5.5" width="2.2" height="13" rx="1.1"/></svg></div><div class="brand-copy"><div class="bt">Brunian <span>Lifts</span></div><div class="bs">${renderSyncChip()}${blockChip}</div></div></div>${active==='workout'?'':`<div class="ovr-mini" title="Overall score"><span>OVR</span><b style="color:${scoreColor(ovr)}">${ovr}</b></div>`}</div></div>
   <nav class="nav ${active==='workout'?'nav--session':''}" aria-label="Main navigation">${tabs.map(([k,l,ic])=>`<button class="${active===k?'active':''}" role="tab" aria-selected="${active===k}" data-action="${k}">${icon(ic)}<span class="nav-l">${l}</span></button>`).join('')}</nav>`;
 }
 function renderToast(){return toast?`<div class="toast" role="status">${esc(toast)}</div>`:''}
@@ -1552,6 +1692,19 @@ function renderRestBar(){
 }
 function restFrac(){if(!restUntil||!restTotal)return 0;return Math.max(0,Math.min(1,(restUntil-Date.now())/(restTotal*1000)))}
 
+/* Offered at the end, not the start, because the answer depends on what got
+   done. Most of the time the honest answer is that the session was enough. */
+function renderExtraCard(){
+  const sug=extraSuggestions();
+  if(!sug) return '';
+  if(sug.suppress) return '';
+  if(sug.enough) return `<div class="card extra-card"><div class="row" style="padding-top:0"><div><strong>Time for more?</strong><div class="small faint">${esc(sug.enough)}</div></div><div class="pill">Enough</div></div></div>`;
+  return `<div class="card extra-card"><div class="row" style="padding-top:0"><div><strong>Time for more?</strong><div class="small muted" style="margin-top:4px">${esc(sug.reason)}</div></div></div>
+  <div class="alt-list" style="margin-top:10px">${sug.list.map(b=>`<button class="alt-card direct" data-action="add-extra" data-extra="${esc(b.id)}">
+    <span class="alt-media"><img src="${CLIP_BASE+esc(b.clip||'')}" alt="" loading="lazy" onerror="this.style.display='none'"></span>
+    <span class="alt-copy"><span class="alt-name">${esc(b.name)}</span><span class="alt-meta">2 sets · ${b.min}-${b.max} reps · start ${esc(altPreview(b,2))}</span></span></button>`).join('')}</div>
+  <div class="small faint" style="margin-top:9px">Two sets. Extra work is logged and counts toward your weekly volume, but never against your session grade.</div></div>`;
+}
 function renderWorkout(){
   const day=planDay(openDay),c=completion();
   const prevNote=previousSameDay(openDay)?.note;
@@ -1564,12 +1717,14 @@ function renderWorkout(){
   ${prevNote?`<div class="card flat note-echo"><span class="eyebrow">Last time you wrote</span><div class="small muted" style="margin-top:5px">${esc(prevNote)}</div></div>`:''}
   <div class="prog">${renderBarbell(c.pct)}<div class="mono small muted" style="text-align:right">${c.pct}%</div></div>
   <div class="groups-grid">${day.groups.map(g=>renderGroup(g,openDay)).join('')}</div>
+  ${(state.session?.extras||[]).length?`<section class="group"><div class="group-head"><div><div class="group-name">Extra work</div><div class="group-rule">Added today. Logged like everything else, but it cannot lower your grade.</div></div></div>${(state.session.extras||[]).map(x=>renderExercise({...x,isExtra:true},openDay,'extra',x.id)).join('')}</section>`:''}
+  ${renderExtraCard()}
   <div class="section"><h2>Session notes</h2><span>Optional</span></div>
   <textarea class="notes" data-action="note" placeholder="Energy, sleep, pain, technique notes">${esc(state.session?.note||'')}</textarea>
   ${renderRestBar()}
   <div class="finish-bar"><div class="finish-inner"><button class="finish" data-action="finish">Finish session</button></div></div></div>`;
 }
-function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div><button class="round-btn" data-action="round">Round done</button></div>${g.exercises.map(base=>({base,ex:sessionExercise(base)})).filter(x=>!state.session?.removedExercises?.includes(x.ex.id)).map(x=>renderExercise(x.ex,dayIndex,g.id,x.base.id)).join('')}</section>`}
+function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div></div>${g.exercises.map(base=>({base,ex:sessionExercise(base)})).filter(x=>!state.session?.removedExercises?.includes(x.ex.id)).map(x=>renderExercise(x.ex,dayIndex,g.id,x.base.id)).join('')}</section>`}
 function renderMedia(ex){return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
 /* The coaching layer. Four blocks in the order you need them at the rack: set
    up, perform, what actually drives growth, and the mistake to avoid. Falls back
@@ -1612,14 +1767,13 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
      only occasionally need — adjustments, the demo, the cues — sits behind a
      disclosure so the card ends at the thing you actually came to tap. */
   return `<article class="exercise" id="ex-${esc(ex.id)}">
-  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}Last: ${esc(fmtEntry(last))} · Target: ${esc(fmtEntry(target))}</div></div><button class="tag" data-action="exercise" data-ex="${ex.id}">Score ${score}</button></div>
-  <div class="range"><div class="bar"><div class="fill ${earned?'earned':''}" style="width:${fill*100}%"></div></div><div class="bar-labs"><span>${ex.min} reps</span><span>${earned&&ex.scoreMode!=='reps'?'Next load +'+ex.inc+'KG':'Top '+ex.max}</span></div></div>
+  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}Last ${esc(fmtEntry(last))} · aim ${ex.min}-${ex.max} reps</div></div></div>
   <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div></div>
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,last.reps?.[i]??last.reps?.[0]??ex.min,Boolean(done[i]))).join('')}</div>
   ${(()=>{const f=failureSet(ex,dayIndex);return f?`<div class="failure-note ${f.go?'go':'hold'}">${esc(f.why)}</div>`:''})()}
-  ${panel(ex.id+':adjust','Adjust',`<div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">Add set</button><button class="mini-btn" data-action="remove-set" data-ex="${ex.id}">Remove set</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">Add warmup</button>${warmups.length?`<button class="mini-btn" data-action="remove-warmup" data-ex="${ex.id}">Remove warmup</button>`:''}<button class="mini-btn gold" data-action="session-swap" data-group="${groupId}" data-base="${baseId}">Swap similar</button><button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button></div>`)}
+  ${panel(ex.id+':adjust','Adjust',`<div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">Add set</button><button class="mini-btn" data-action="remove-set" data-ex="${ex.id}">Remove set</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">Add warmup</button>${warmups.length?`<button class="mini-btn" data-action="remove-warmup" data-ex="${ex.id}">Remove warmup</button>`:''}<button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button></div>`)}
   ${panel(ex.id+':tech','How to do this properly',renderTechnique(ex))}
   ${panel(ex.id+':alts','Swap this exercise',renderAlternatives(ex,groupId,baseId))}
   </article>`;
@@ -1826,7 +1980,7 @@ function renderData(){
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Danger zone</strong><div class="small faint">Reset is double-confirmed and leaves a pre-reset snapshot.</div></div><button class="secondary danger" data-action="reset">Reset local data</button></div></div></div>`;
 }
 
-function renderReport(){const r=state.lastReport;if(!r){view='home';return renderHome()}const good=['S','A'].includes(r.grade);return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('report')}<section class="hero report-hero"><div class="eyebrow">Workout report</div><div class="report-grade ${good?'good':''}">${esc(r.grade)}</div><div class="report-narr">${esc(r.narrative)}</div><div class="report-sub mono">OVR ${r.overall} (${r.delta>=0?'+':''}${r.delta}) · ${r.comp.up}↑ ${r.comp.held}→ ${r.comp.down}↓ · ${r.completion}% · ${r.durationMin} min · ${r.volume||0}KG${r.rpe?` · @${r.rpe} RPE`:''}</div>${r.prs?.length?`<div class="pr"><strong>New PRs:</strong> ${r.prs.slice(0,5).map(p=>`${esc(p.name)} ${esc(p.kind)} ${p.old}→${p.now}`).join(' · ')}</div>`:''}<div class="feedback"><div class="feedback-title">What to improve next time</div><ol class="feedback-list">${r.feedback.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><button class="primary" data-action="summary">Open summary sheet</button><button class="secondary block" data-action="home">Back home</button></section><div class="section"><h2>Movement deltas</h2><span>Vs ${r.first?'baseline':'last same day'}</span></div><div class="card flat">${r.comp.lines.map(l=>`<div class="row"><div><strong>${esc(l.name)}</strong><div class="small faint">Strength ${Math.round(l.strength*1000)/10}% · Volume ${Math.round(l.vol*1000)/10}%</div></div><div class="mono" style="color:${l.dir==='up'?'var(--series)':l.dir==='down'?'var(--risk)':'var(--muted)'}">${l.index>=0?'+':''}${Math.round(l.index*1000)/10}%</div></div>`).join('')}</div></div>`}
+function renderReport(){const r=state.lastReport;if(!r){view='home';return renderHome()}const good=['S','A'].includes(r.grade);return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('report')}<section class="hero report-hero"><div class="eyebrow">Workout report</div><div class="report-grade ${good?'good':''}">${esc(r.grade)}</div><div class="report-narr">${esc(r.narrative)}</div><div class="report-sub mono">OVR ${r.overall} (${r.delta>=0?'+':''}${r.delta}) · ${r.comp.up}↑ ${r.comp.held}→ ${r.comp.down}↓ · ${r.completion}% · ${r.durationMin} min · ${r.volume||0}KG${r.rpe?` · @${r.rpe} RPE`:''}</div>${r.prs?.length?`<div class="pr"><strong>New PRs:</strong> ${r.prs.slice(0,5).map(p=>`${esc(p.name)} ${esc(p.kind)} ${p.old}→${p.now}`).join(' · ')}</div>`:''}${r.balance&&r.balance.penalty?`<div class="banner warn" style="margin:12px 0"><strong>Unbalanced session</strong><div>${esc(balanceNote(r.balance))}</div></div>`:''}<div class="feedback"><div class="feedback-title">What to improve next time</div><ol class="feedback-list">${r.feedback.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><button class="primary" data-action="summary">Open summary sheet</button><button class="secondary block" data-action="home">Back home</button></section><div class="section"><h2>Movement deltas</h2><span>Vs ${r.first?'baseline':'last same day'}</span></div><div class="card flat">${r.comp.lines.map(l=>`<div class="row"><div><strong>${esc(l.name)}</strong><div class="small faint">Strength ${Math.round(l.strength*1000)/10}% · Volume ${Math.round(l.vol*1000)/10}%</div></div><div class="mono" style="color:${l.dir==='up'?'var(--series)':l.dir==='down'?'var(--risk)':'var(--muted)'}">${l.index>=0?'+':''}${Math.round(l.index*1000)/10}%</div></div>`).join('')}</div></div>`}
 
 /* ---- Original 1: Strength Portfolio ---- */
 function renderPortfolio(){
@@ -1937,6 +2091,7 @@ app.addEventListener('click',e=>{
   else if(a==='add-warmup')addWarmup(t.dataset.ex);
   else if(a==='remove-warmup')removeWarmup(t.dataset.ex);
   else if(a==='session-swap')openSessionSwap(t.dataset.group,t.dataset.base);
+  else if(a==='add-extra')addExtraExercise(t.dataset.extra);
   else if(a==='alt-pick'){bankTarget={dayIndex:state.session?.dayIndex,groupId:t.dataset.group,replaceId:t.dataset.base,sessionOnly:true};chooseFromBank(t.dataset.alt)}
   else if(a==='session-remove')removeSessionExercise(t.dataset.ex);
   else if(a==='calendar-prev'){calendarOffset--;render()}
