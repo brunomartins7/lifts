@@ -1759,7 +1759,7 @@ function renderWorkout(){
   const prevNote=previousSameDay(openDay)?.note;
   return `<div class="shell has-finish no-anim"><div id="toast-slot">${renderToast()}</div>${renderHead('workout')}
   <button class="back" data-action="home">‹ Home</button>
-  <div class="level-head" style="margin-top:8px"><div><div class="eyebrow">In session · <span id="sess-clock">${Math.floor((Date.now()-(state.session?.startedAt||Date.now()))/60000)} min</span></div><div class="title">Day ${day.id} <em>${esc(day.name)}</em></div></div><div class="pill">${c.done}/${c.total}</div></div>
+  <div class="level-head" style="margin-top:8px"><div><div class="eyebrow">In session · <span id="sess-clock">${Math.floor((Date.now()-(state.session?.startedAt||Date.now()))/60000)} min</span></div><div class="title title--compact">Day ${day.id}</div><div class="sub" style="margin-top:2px">${esc(day.name)}</div></div><div class="pill">${c.done}/${c.total}</div></div>
   <div class="switcher">${state.program.map((d,i)=>`<button class="switch ${i===openDay?'active':''}" data-action="switch-day" data-day="${i}">${d.id}</button>`).join('')}</div>
   ${inDeload()?'<div class="banner warn"><strong>Deload week</strong><div>Loads are prefilled 10% lighter at floor reps. Keep every rep crisp and leave fresh — the block restarts next week.</div></div>':''}
   ${(state.session?.removedExercises||[]).length?'<div class="banner warn"><strong>Exercise removed for today</strong><div>Its planned sets remain incomplete and will reduce this session’s completion grade.</div></div>':''}
