@@ -19,7 +19,7 @@ const DEFAULT_PLAN = [
   ]},
   {id:'A2',name:'Shoulder And Chest Detail',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
    {id:'shoulderPress',name:'Seated Dumbbell Shoulder Press',clip:'delts/dumbbell-seated-shoulder-press.gif',type:'compound',muscle:'shoulders',equipment:'dumbbell',sets:3,min:8,max:12,inc:2.5,startWeight:12.5,startReps:8,goalWeight:22.5,goalReps:10,averageWeight:17.5,averageReps:8,cues:['Brace before pressing.','Keep wrists stacked over elbows.','Do not chase reps after the press path breaks.']},
-   {id:'cableFly',name:'Dumbbell Fly Or Cable Fly',clip:'pectorals/dumbbell-fly.gif',type:'isolation',muscle:'chest',equipment:'dumbbell',sets:3,min:12,max:15,inc:2.5,startWeight:10,startReps:12,goalWeight:17.5,goalReps:12,averageWeight:12.5,averageReps:12,cues:['Keep a fixed elbow angle.','Pause briefly in the stretch.','Keep shoulders controlled.']},
+   {id:'cableFly',name:'Cable Standing Fly',clip:'pectorals/cable-standing-fly.gif',type:'isolation',muscle:'chest',equipment:'dumbbell',sets:3,min:12,max:15,inc:2.5,startWeight:10,startReps:12,goalWeight:17.5,goalReps:12,averageWeight:12.5,averageReps:12,cues:['Keep a fixed elbow angle.','Pause briefly in the stretch.','Keep shoulders controlled.']},
    {id:'pushdown',name:'Triceps Pushdown',clip:'triceps/cable-triceps-pushdown-v-bar.gif',type:'isolation',muscle:'triceps',equipment:'cable',sets:3,min:10,max:15,inc:2.5,startWeight:15,startReps:10,goalWeight:35,goalReps:12,averageWeight:25,averageReps:12,cues:['Lock elbows to your sides.','Reach full extension.','Control the return.']}
   ]},
   {id:'A3',name:'Arm Finisher',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
@@ -38,7 +38,7 @@ const DEFAULT_PLAN = [
   ]},
   {id:'B3',name:'Biceps And Forearms',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
    {id:'hammer',name:'Dumbbell Hammer Curl',clip:'biceps/dumbbell-one-arm-standing-hammer-curl.gif',type:'isolation',muscle:'biceps',equipment:'dumbbell',sets:3,min:10,max:12,inc:2.5,startWeight:10,startReps:10,goalWeight:20,goalReps:10,averageWeight:15,averageReps:10,cues:['Keep palms facing each other.','Do not swing the dumbbells.','Lower fully.']},
-   {id:'curl',name:'Cable Or Dumbbell Curl',clip:'biceps/dumbbell-standing-biceps-curl.gif',type:'isolation',muscle:'biceps',equipment:'dumbbell',sets:3,min:10,max:15,inc:2.5,startWeight:7.5,startReps:10,goalWeight:15,goalReps:12,averageWeight:12.5,averageReps:12,cues:['Keep elbows close.','Use a full range you can control.','Do not lean back to finish.']},
+   {id:'curl',name:'Dumbbell Curl',clip:'biceps/dumbbell-standing-biceps-curl.gif',type:'isolation',muscle:'biceps',equipment:'dumbbell',sets:3,min:10,max:15,inc:2.5,startWeight:7.5,startReps:10,goalWeight:15,goalReps:12,averageWeight:12.5,averageReps:12,cues:['Keep elbows close.','Use a full range you can control.','Do not lean back to finish.']},
    {id:'wristCurl',name:'Dumbbell Wrist Curl',clip:'forearms/dumbbell-seated-palms-up-wrist-curl.gif',type:'isolation',muscle:'forearms',equipment:'dumbbell',sets:3,min:12,max:20,inc:2.5,startWeight:7.5,startReps:12,goalWeight:17.5,goalReps:15,averageWeight:12.5,averageReps:15,cues:['Use a controlled tempo.','Move through the wrist, not the elbow.','Keep reps smooth.']}
   ]}
  ]},
@@ -49,7 +49,7 @@ const DEFAULT_PLAN = [
   ]},
   {id:'C2',name:'Pump Press And Rear Delts',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
    {id:'inclinePump',name:'Incline Dumbbell Press Pump Set',clip:'pectorals/dumbbell-incline-bench-press.gif',type:'isolation',muscle:'chest',equipment:'dumbbell',sets:3,min:12,max:15,inc:2.5,startWeight:12.5,startReps:12,goalWeight:22.5,goalReps:12,averageWeight:17.5,averageReps:12,cues:['Use controlled pump reps.','Keep tension on chest.','Stop before form breaks.']},
-   {id:'cableRow',name:'Face Pulls Or Cable Row',clip:'upper-back/cable-seated-row.gif',type:'isolation',muscle:'back',equipment:'cable',sets:3,min:12,max:15,inc:2.5,startWeight:12.5,startReps:12,goalWeight:32.5,goalReps:12,averageWeight:27.5,averageReps:12,cues:['Keep torso still.','Pull with upper back.','Control the eccentric.']}
+   {id:'cableRow',name:'Cable Seated Row',clip:'upper-back/cable-seated-row.gif',type:'isolation',muscle:'back',equipment:'cable',sets:3,min:12,max:15,inc:2.5,startWeight:12.5,startReps:12,goalWeight:32.5,goalReps:12,averageWeight:27.5,averageReps:12,cues:['Keep torso still.','Pull with upper back.','Control the eccentric.']}
   ]},
   {id:'C3',name:'Arm Superset',rule:'3 rounds. One set of each exercise, then rest.',exercises:[
    {id:'curlC',name:'Dumbbell Curl',clip:'biceps/dumbbell-standing-biceps-curl.gif',type:'isolation',muscle:'biceps',equipment:'dumbbell',sets:3,min:10,max:15,inc:2.5,startWeight:7.5,startReps:10,goalWeight:17.5,goalReps:12,averageWeight:12.5,averageReps:12,cues:['Keep elbows stable.','Squeeze without swinging.','Lower with control.']},
@@ -249,6 +249,21 @@ function repairProgram(p){
   return out.length ? out : base;
 }
 
+/* Three slots shipped as either/or labels — "Face Pulls Or Cable Row" is the
+   worst, because a face pull and a cable row are 20kg apart and were sharing one
+   load history. One id can only track one movement. The id is kept so the logged
+   history survives; only the label and demo change. */
+const AMBIGUOUS = {
+  cableRow: {was:/Face Pulls Or Cable Row/i, name:'Cable Seated Row', clip:'upper-back/cable-seated-row.gif'},
+  cableFly: {was:/Dumbbell Fly Or Cable Fly/i, name:'Cable Standing Fly', clip:'pectorals/cable-standing-fly.gif'},
+  curl:     {was:/Cable Or Dumbbell Curl/i, name:'Dumbbell Curl', clip:'biceps/dumbbell-standing-biceps-curl.gif'}
+};
+function disambiguate(program){
+  for(const day of program||[]) for(const g of day.groups||[]) for(const ex of g.exercises||[]){
+    const fix=AMBIGUOUS[ex.id];
+    if(fix && fix.was.test(ex.name||'')){ ex.name=fix.name; ex.clip=fix.clip; }
+  }
+}
 function migrate(raw){
   const f = freshState();
   let n = {...f, ...(raw||{})};
@@ -263,6 +278,7 @@ function migrate(raw){
   }
   delete n.sessionsLog; delete n.roundDone;
   delete n.__recoveredFrom; delete n.__quarantined; delete n.__fresh;   // transient flags — set per-load by loadState, never persisted
+  disambiguate(n.program);
   n.sessions = n.sessions.filter(s=>s&&s.entries).map(s=>normalizeSession(s,n));
   n.currentDayIndex = Number.isInteger(n.currentDayIndex)?clamp(n.currentDayIndex,0,n.program.length-1):0;
   if (n.session && n.session.dayIndex==null) n.session=null;
@@ -533,9 +549,6 @@ function targetFromLast(ex,last){
   else{const i=reps.findIndex(r=>r<ex.max);if(i>=0)reps[i]=Math.min(ex.max,reps[i]+1);else reps[reps.length-1]=Math.min(ex.max,reps[reps.length-1]+1)}
   return{weight,reps};
 }
-/* Three interchangeable options for a slot: same primary muscle and same joint
-   action, spread across equipment so a busy rack never costs a session. Curated
-   lists win; otherwise take the best bank match per distinct equipment type. */
 /* "Same muscle" is not the same stimulus: a reverse curl and a wrist curl are
    both isolation work tagged forearms, but one is elbow flexion and the other is
    wrist flexion. Matching on the movement pattern is what keeps a swap honest. */
@@ -568,22 +581,34 @@ function patternOf(ex){
   for(const [name,re] of PATTERNS) if(re.test(s)) return name;
   return '';
 }
-/* Three interchangeable options for a slot: same primary muscle and the same
-   joint action, spread across equipment so a busy rack never costs a session.
-   Curated lists win; otherwise derive from the bank on muscle plus pattern. */
-function alternativesFor(ex){
-  const curated=(ALTERNATIVES[ex.id]||[]).map(id=>BANK.find(b=>b.id===id)).filter(Boolean);
-  if(curated.length) return curated.slice(0,3);
+/* Swaps come in three tiers, because "same muscle" covers everything from a
+   true like-for-like to a completely different job. Mixing them in one list is
+   how somebody swaps a row for a curl and quietly wrecks the session.
+     direct — same muscle AND same joint action. Interchangeable, no cost.
+     near   — same muscle, different joint action. Trains the muscle, changes
+              the stimulus: a fly is not a press.
+     all    — the full bank, behind a browse button. */
+function swapTiers(ex){
   const pat=patternOf(ex);
-  const same=b=>b.id!==ex.id
-    && b.clip!==ex.clip                       // the same movement under another id
-    && b.muscle===ex.muscle
-    && (pat?patternOf(b)===pat:b.type===ex.type);
-  const out=[], seen=new Set([ex.equipment]);
-  for(const b of BANK){ if(!same(b)||seen.has(b.equipment)) continue; seen.add(b.equipment); out.push(b); if(out.length===3) break; }
-  for(const b of BANK){ if(out.length===3) break; if(!same(b)||out.some(x=>x.id===b.id)) continue; out.push(b); }
-  return out;
+  const sameMuscle=b=>b.id!==ex.id && b.clip!==ex.clip && b.muscle===ex.muscle;
+  const curated=(ALTERNATIVES[ex.id]||[]).map(id=>BANK.find(b=>b.id===id)).filter(Boolean);
+  const direct=[], near=[], seenEquip=new Set([ex.equipment]);
+  for(const b of curated) if(sameMuscle(b) && (!pat||patternOf(b)===pat)) direct.push(b);
+  const samePattern=b=>sameMuscle(b) && pat && patternOf(b)===pat && !direct.some(d=>d.id===b.id);
+  // first pass spreads across equipment, so a busy rack never costs a session
+  for(const b of BANK){ if(direct.length>=3) break; if(samePattern(b) && !seenEquip.has(b.equipment)){ seenEquip.add(b.equipment); direct.push(b); } }
+  // second pass fills the remaining slots regardless: whole families share one
+  // equipment type (every hanging leg raise is bodyweight, every leg curl a
+  // machine), and spreading by equipment would leave those with no direct swap
+  for(const b of BANK){ if(direct.length>=3) break; if(samePattern(b)) direct.push(b); }
+  for(const b of BANK){
+    if(!sameMuscle(b) || direct.some(d=>d.id===b.id)) continue;
+    if(!pat || patternOf(b)!==pat){ if(near.length<4) near.push(b); }
+  }
+  return {direct:direct.slice(0,3), near};
 }
+/* Kept for the alternatives test and any caller that just wants like-for-like. */
+function alternativesFor(ex){ return swapTiers(ex).direct; }
 
 /* The load he should use on a movement he has never performed, shown before he
    commits to the swap. */
@@ -1160,11 +1185,52 @@ function exportCSV(){
 function importData(){const input=document.createElement('input');input.type='file';input.accept='application/json,.json';input.onchange=()=>{const file=input.files&&input.files[0];if(!file)return;const reader=new FileReader();reader.onload=()=>{try{const parsed=JSON.parse(String(reader.result||'{}'));snapshot('pre-import');const keepToken=state.settings.gistToken,keepId=state.settings.gistId;state=migrate(parsed.data||parsed);state.settings.gistToken=state.settings.gistToken||keepToken;state.settings.gistId=state.settings.gistId||keepId;openDay=state.session?state.session.dayIndex:state.currentDayIndex;view=state.session?'workout':'home';save();jumpTop();render();flash('Import complete.')}catch(_){flash('Import failed. Use a Brunian Lifts JSON export file.')}};reader.readAsText(file)};input.click()}
 function resetAll(){confirmBox={title:'Reset all local data?',text:'This clears sessions, draft, scores and settings from this device. A pre-reset snapshot is kept and export is recommended first.',ok:'Reset everything',danger:true,onYes:()=>{snapshot('pre-reset');try{[KEY,...LEGACY].forEach(k=>STORAGE.removeItem(k))}catch(_){}state=freshState();openDay=0;view='home';confirmBox=null;save();render();flash('Local data reset. A pre-reset snapshot was kept.')}};render()}
 
+/* A probe of the IndexedDB mirror, filled in once at boot. Rendering cannot wait
+   on it, so it holds null until answered and the Data view re-renders. */
+let idbProbe = {state:'checking', sessions:0};
+function probeIDB(){
+  return IDB.read().then(m=>{
+    idbProbe = m && Array.isArray(m.sessions)
+      ? {state:'present', sessions:m.sessions.length}
+      : {state:'empty', sessions:0};
+  }).catch(()=>{ idbProbe={state:'error',sessions:0}; });
+}
+
+/* Everything known about where this ledger physically lives, in one place. Two
+   rounds of fixes failed to stop the resets, so the app now reports the facts
+   rather than inviting another guess. */
+function storageReport(){
+  let raw=null; try{ raw=STORAGE.getItem(KEY); }catch(_){}
+  let parsed=null; try{ parsed=raw?JSON.parse(raw):null; }catch(_){}
+  const snaps=STORAGE.keys().filter(k=>k.startsWith(SNAP_PREFIX)).length;
+  const lastWrite=parsed&&parsed.settings&&parsed.settings.updatedAt?Number(parsed.settings.updatedAt):0;
+  const sessions=parsed&&Array.isArray(parsed.sessions)?parsed.sessions.length:0;
+  const synced=Boolean(state.settings.gistToken&&state.settings.gistId);
+  let verdict, level;
+  if(!STORAGE.ok){
+    level='bad'; verdict='This browser refuses to store anything. Every workout you log dies when you close the app. Nothing else on this screen can help until this changes — it usually means a private window.';
+  }else if(!raw){
+    level='bad'; verdict='There is no saved ledger on this device right now. If you have logged workouts before, this device was cleared.';
+  }else if(!synced && sessions>0){
+    level='warn'; verdict=`This device holds the only copy of ${sessions} logged session${sessions===1?'':'s'}. If the browser clears it — which is what has been happening — there is nothing to restore from. Cloud sync above is the fix.`;
+  }else if(!synced){
+    level='warn'; verdict='Nothing is logged yet, so nothing is at risk. Set up cloud sync before your first session and it never will be.';
+  }else{
+    level='ok'; verdict=`Saved locally and mirrored to the cloud. ${sessions} session${sessions===1?'':'s'} on this device.`;
+  }
+  return {level,verdict,raw:Boolean(raw),bytes:raw?raw.length:0,sessions,snaps,lastWrite,synced};
+}
 /* Storage health — tells the truth about the current origin. */
 function storageHealth(){
   const proto=location.protocol, host=location.hostname;
   if(!STORAGE.ok)return{level:'bad',msg:'This browser is blocking storage. Data lives only in memory for this tab. Set up cloud sync or export before closing.'};
   if(saveFailed)return{level:'bad',msg:'The last save was rejected — this device is out of storage. Export now, then delete old snapshots in this screen.'};
+  /* state.sessions is already in memory, so this stays cheap enough to run on
+     every render. The full report parses the stored payload and lives in Data. */
+  if(!state.settings.gistToken || !state.settings.gistId){
+    const n=(state.sessions||[]).length;
+    if(n) return{level:'bad',msg:`This device holds the only copy of your ${n} logged session${n===1?'':'s'}, and this browser has been clearing it. Open Data and set up cloud sync — it is the only thing that survives a wipe.`};
+  }
   if(persistGranted===false)return{level:'warn',msg:'This browser has not granted persistent storage, so it may clear your ledger after about a week idle. Add the app to your home screen and set up cloud sync — both are in this screen.'};
   if(proto==='file:')return{level:'warn',msg:'Running from a local file. Some phones clear file-based storage. Use one stable hosted URL (see the guide in Data) and set up cloud sync.'};
   if(/netlify\.app$/.test(host)&&(state.sessions||[]).length===0)return{level:'warn',msg:'Every new Netlify Drop upload is a brand-new site with empty storage. Deploy once to a stable URL and keep using that link.'};
@@ -1340,17 +1406,20 @@ function renderTechnique(ex){
 /* Three same-stimulus options, each with the load he should start on, swapped
    for today only through the existing session-swap path. */
 function renderAlternatives(ex,groupId,baseId){
-  const alts=alternativesFor(ex);
-  if(!alts.length) return '<div class="small faint">No close match in the bank for this movement.</div>';
+  const {direct,near}=swapTiers(ex);
   const active=new Set(sessionExercises().map(x=>x.id));
-  return `<div class="small muted" style="margin-bottom:9px">Same muscle, same joint action. Swapping keeps your score — the load below is estimated from your own training.</div>
-  <div class="alt-list">${alts.map(b=>{
+  const card=(b,tier)=>{
     const taken=active.has(b.id);
-    return `<button class="alt-card" data-action="alt-pick" data-alt="${esc(b.id)}" data-group="${esc(groupId)}" data-base="${esc(baseId)}" ${taken?'disabled':''}>
+    return `<button class="alt-card ${tier}" data-action="alt-pick" data-alt="${esc(b.id)}" data-group="${esc(groupId)}" data-base="${esc(baseId)}" ${taken?'disabled':''}>
       <span class="alt-media"><img src="${CLIP_BASE+esc(b.clip)}" alt="" loading="lazy" onerror="this.style.display='none'"></span>
       <span class="alt-copy"><span class="alt-name">${esc(b.name)}</span><span class="alt-meta">${esc(b.equipment)} · ${b.min}–${b.max} reps · ${taken?'already in today':'start '+esc(altPreview(b,ex.sets))}</span></span>
     </button>`;
-  }).join('')}</div>`;
+  };
+  const tier=(label,note,list,cls)=>list.length?`<div class="swap-tier"><div class="swap-h ${cls}">${label}<span>${esc(note)}</span></div><div class="alt-list">${list.map(b=>card(b,cls)).join('')}</div></div>`:'';
+  return tier('Direct swaps','Same muscle, same movement. Free to switch.',direct,'direct')
+    + tier('Near swaps','Same muscle, different movement. Changes the stimulus.',near,'near')
+    + `<div class="swap-tier"><div class="swap-h other">Everything else<span>Counts against your session grade if it unbalances the day</span></div>
+       <button class="secondary block" data-action="session-swap" data-group="${esc(groupId)}" data-base="${esc(baseId)}">Browse all ${BANK.length} movements</button></div>`;
 }
 function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   const d=state.session?.draft?.[ex.id]||targetEntry(ex),done=state.session?.setDone?.[ex.id]||[],last=latestEntryFor(ex),target=targetEntry(ex),score=scoreFromEntry(ex,last),earned=(d.reps||[]).every(r=>r>=ex.max),weakR=Math.min(...(d.reps||[ex.min])),fill=clamp((weakR-ex.min)/Math.max(1,ex.max-ex.min),0,1),warmups=Array.isArray(d.warmups)?d.warmups:[];
@@ -1520,6 +1589,7 @@ function renderData(){
   const snaps=listSnapshots();
   const conf=Boolean(state.settings.gistToken&&state.settings.gistId);
   const link=recoveryLink();
+  const rep=storageReport();
   return `<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('data')}
   <section class="hero"><div class="eyebrow">Data center</div><div class="title">One ledger, every device</div><div class="sub">Cloud sync keeps phone and laptop identical. Snapshots and exports protect against everything else.</div></section>
   ${renderRecoveryBanner()}${renderHealthBanner()}
@@ -1531,8 +1601,14 @@ function renderData(){
     <div class="small faint" style="margin-top:10px">The token stays on this device only — it is never included in the cloud file or in exports.</div>
   </div>
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Durability</strong><div class="small faint">Whether this browser is allowed to keep your ledger between visits.</div></div><div class="pill">${persistGranted===true?'Persistent':persistGranted===false?'At risk':'Checking'}</div></div>
+    <div class="banner ${rep.level}" style="margin:2px 0 10px"><div>${esc(rep.verdict)}</div></div>
+    <div class="row"><span>Saved ledger on this device</span><strong>${rep.raw?`${rep.sessions} session${rep.sessions===1?'':'s'} · ${Math.round(rep.bytes/1024)}KB`:'None found'}</strong></div>
+    <div class="row"><span>Last written</span><strong>${rep.lastWrite?esc(relTime(rep.lastWrite)):'Never'}</strong></div>
+    <div class="row"><span>Backup copy (IndexedDB)</span><strong>${idbProbe.state==='present'?`${idbProbe.sessions} session${idbProbe.sessions===1?'':'s'}`:idbProbe.state==='checking'?'Checking':idbProbe.state==='error'?'Unreadable':'Empty'}</strong></div>
+    <div class="row"><span>Local restore points</span><strong>${rep.snaps}</strong></div>
     <div class="row"><span>Eviction protection</span><strong>${persistGranted===true?'Granted':persistGranted===false?'Not granted':'Checking'}</strong></div>
     <div class="row"><span>Local writes</span><strong>${STORAGE.ok?(saveFailed?'Failing — out of space':'Working'):'Blocked by browser'}</strong></div>
+    <div class="row"><span>Cloud copy</span><strong>${rep.synced?(state.settings.lastSyncAt?esc(relTime(new Date(state.settings.lastSyncAt).getTime())):'Configured, never synced'):'Not set up'}</strong></div>
     ${persistGranted===true?'':`<ol class="feedback-list"><li>Open this page in Safari, press Share, then Add to Home Screen. A home-screen app is the only kind iOS exempts from clearing storage after a week.</li><li>Open the app from that icon from now on, not from a Safari tab.</li></ol>`}
     ${link?`<div class="field" style="margin-top:10px"><label>Recovery link — bookmark this, it restores everything</label><input readonly value="${esc(link)}" onfocus="this.select()"></div><div class="session-actions" style="margin-top:10px"><button class="secondary gold" data-action="copy-link">Copy recovery link</button></div><div class="small faint" style="margin-top:9px">Add the app to your home screen using this link and the ledger rebuilds itself even after a storage wipe. The trade-off is real: the link <em>is</em> your GitHub token, only base64'd, so it lands anywhere a URL lands — browser history, synced bookmarks, screenshots, anything you paste it into. Use a fine-grained token whose only permission is Gists, so a leak costs you your gists and nothing else, and revoke it on GitHub if the link ever escapes.</div>`:'<div class="small faint" style="margin-top:10px">Set up cloud sync above to generate a recovery link.</div>'}
   </div>
@@ -1733,6 +1809,7 @@ adoptRecoveryLink();
 render();
 snapshot();
 requestPersistence().then(()=>render());   // the answer changes what Data and the health banner say
+probeIDB().then(()=>{ if(view==='data') render(); });
 
 /* localStorage can be cleared while the IndexedDB mirror survives — that is the
    whole point of keeping a second copy, and until now nothing ever read it. */

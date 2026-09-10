@@ -288,6 +288,16 @@
     .alt-copy{display:grid;gap:3px;min-width:0}
     .alt-name{font-weight:800;font-size:12.5px;line-height:1.3;color:var(--ink)}
     .alt-meta{font-size:11px;color:var(--muted);text-transform:capitalize}
+    /* ---- swap tiers: direct / near / everything else ---- */
+    .swap-tier+.swap-tier{margin-top:14px}
+    .swap-h{display:flex;flex-direction:column;gap:2px;margin-bottom:8px;font-size:10px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800}
+    .swap-h span{font-size:11px;letter-spacing:0;text-transform:none;font-weight:500;color:var(--muted)}
+    .swap-h.direct{color:var(--gold2)}
+    .swap-h.near{color:var(--ink2)}
+    .swap-h.other{color:var(--faint)}
+    .alt-card.direct{border-color:var(--goldDim)}
+    .alt-card.near{border-style:dashed}
+    .secondary.block{width:100%}
     /* ---- coached program chooser ---- */
     .demo-note{margin-top:11px;padding:10px 12px;border:1px dashed var(--line2);border-radius:var(--r-md);background:var(--bg2)}
     .demo-note p{margin:0;color:var(--ink2);font-size:12.5px;line-height:1.6}
