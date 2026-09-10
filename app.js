@@ -249,6 +249,8 @@ function repairProgram(p){
         merged.inc = Number(merged.inc)||seed.inc||2.5;
         merged.equipment = merged.equipment || guessEquipment(merged);
         merged.cues = Array.isArray(merged.cues)&&merged.cues.length?merged.cues:(seed.cues||[]);
+        if(merged.rir!=null) merged.rir = clamp(Number(merged.rir)||0,0,4);
+        if(merged.rest!=null) merged.rest = clamp(Number(merged.rest)||60,30,300);
         return merged;
       })
     })).filter(g=>g.exercises.length)
@@ -1220,7 +1222,9 @@ function logSet(exId,index){
   const d=state.session.draft[exId];
   if(d){ d.setWeights=Array.isArray(d.setWeights)?d.setWeights:[]; if(!was) d.setWeights[index]=Number(d.weight)||0; }
   save();
-  if(!was && state.settings.autoRest) startRest(state.settings.restSec||60);
+  /* A heavy compound and a lateral raise do not need the same rest, so the
+     exercise's own figure wins over the global default when it has one. */
+  if(!was && state.settings.autoRest) startRest(Number(exById(exId).rest)||state.settings.restSec||60);
   render();
 }
 function logWarmup(exId,index){if(!state.session)return;const d=state.session.draft[exId];if(!d||!d.warmups||!d.warmups[index])return;d.warmups[index].done=!d.warmups[index].done;save();render()}
@@ -1478,6 +1482,12 @@ function presetToProgram(preset){
         const ex={id:b.id,name:b.name,clip:b.clip,type:b.type,muscle:b.muscle,equipment:b.equipment,
           sets:clamp(Number(sl.sets)||3,1,6),min,max,inc:b.inc,
           startWeight:b.startWeight,startReps:min,goalWeight:b.goalWeight,goalReps:max,cues:[]};
+        /* Effort and rest are part of the prescription, not decoration. A slot
+           that says two reps in reserve and 150 seconds is describing a
+           different exercise from the same movement at 0 RIR and 60 seconds. */
+        if(Number(sl.rir)>=0&&sl.rir!=null) ex.rir=clamp(Number(sl.rir),0,4);
+        if(Number(sl.rest)>0) ex.rest=clamp(Number(sl.rest),30,300);
+        if(sl.note) ex.note=sl.note;
         if(b.scoreMode) ex.scoreMode=b.scoreMode;
         return ex;
       }).filter(Boolean)
@@ -1931,7 +1941,7 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
      only occasionally need — adjustments, the demo, the cues — sits behind a
      disclosure so the card ends at the thing you actually came to tap. */
   return `<article class="exercise" id="ex-${esc(ex.id)}">
-  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}${target.backedOff?'<span style="color:var(--gold2)">Load reduced — last time fell under '+ex.min+' reps</span> · ':''}Last ${esc(fmtEntry(last))} · aim ${ex.min}-${ex.max} reps</div></div></div>
+  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}${target.backedOff?'<span style="color:var(--gold2)">Load reduced — last time fell under '+ex.min+' reps</span> · ':''}Last ${esc(fmtEntry(last))} · aim ${ex.min}-${ex.max} reps${ex.rir!=null?` · leave ${ex.rir} in reserve`:''}${ex.rest?` · rest ${Math.round(ex.rest/15)*15}s`:''}</div></div></div>
   <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div></div>
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
