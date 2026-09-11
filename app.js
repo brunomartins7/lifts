@@ -1201,15 +1201,23 @@ function draftFor(exId){if(!state.session)return null;const ex=exById(exId);cons
 function step(exId,kind,index,dir){
   const d=draftFor(exId); if(!d)return; const ex=exById(exId);
   if(kind==='weight')d.weight=clamp(Number((Number(d.weight)+dir*Number(ex.inc||2.5)).toFixed(1)),0,500);
+  if(kind==='perSide')d.weight=clamp(fromPerSide(perSide(d.weight)+dir*(Number(ex.inc||2.5)/2)),0,500);
   if(kind==='reps'){d.reps[index]=clamp(Number(d.reps[index]||0)+dir,0,100);state.session.setDone[exId][index]=false}
   if(kind==='warmWeight'&&d.warmups[index])d.warmups[index].weight=clamp(Number((Number(d.warmups[index].weight)+dir*Number(ex.inc||2.5)).toFixed(1)),0,500);
   if(kind==='warmReps'&&d.warmups[index]){d.warmups[index].reps=clamp(Number(d.warmups[index].reps||0)+dir,0,100);d.warmups[index].done=false}
   save();render();
 }
+/* Loading a barbell is counted in plates per side, not in total kilos, so the
+   app now accepts either and keeps them in step. Typing 15 a side on a 20kg bar
+   sets the work weight to 50; typing 50 sets the side to 15. */
+function barKg(){ return clamp(Number(state.settings.barWeight)||20,0,40); }
+function perSide(total){ return Math.max(0, Math.round(((Number(total)||0)-barKg())/2*100)/100); }
+function fromPerSide(side){ return Number((barKg()+2*Math.max(0,Number(side)||0)).toFixed(2)); }
 function setDirect(exId,kind,index,value){ // direct numeric typing, no re-render (keeps focus)
   const d=draftFor(exId); if(!d)return;
   const v=Number(value);
   if(kind==='weight'&&isFinite(v))d.weight=clamp(v,0,500);
+  if(kind==='perSide'&&isFinite(v))d.weight=clamp(fromPerSide(v),0,500);
   if(kind==='reps'&&isFinite(v)){d.reps[index]=clamp(Math.round(v),0,100);state.session.setDone[exId][index]=false}
   save();
 }
@@ -1310,12 +1318,28 @@ function extraSuggestions(){
     const list=pick(m,3);
     if(list.length) return {reason:`${MUSCLE_LABEL[m]||m} was on today's plan and got no work. This is the gap worth closing.`,list,muscle:m};
   }
+  /* Measure the week against what the programme prescribes, not against a flat
+     number. If he has swapped every triceps movement out, triceps show a deficit
+     even though nothing looks wrong on today's plan. */
   const weekly=weeklyMuscleSets();
-  const trained=[...new Set(uniqueExercises().map(e=>e.muscle).filter(Boolean))];
-  const thin=trained.map(m=>({m,sets:weekly[m]||0})).sort((a,b)=>a.sets-b.sets)[0];
-  if(thin&&thin.sets<6){
+  const target={};
+  for(const ex of uniqueExercises()) if(ex.muscle) target[ex.muscle]=(target[ex.muscle]||0)+(Number(ex.sets)||3);
+  /* Muscles the programme used to cover but no longer does still deserve work,
+     so anything in the exercise index counts as something he trains. */
+  for(const id in (state.exerciseIndex||{})){
+    const m=state.exerciseIndex[id].muscle;
+    if(m && target[m]==null && !LEG_MUSCLES.includes(m)) target[m]=0;
+  }
+  const deficits=Object.keys(target)
+    .map(m=>({m,have:weekly[m]||0,want:target[m],gap:(target[m]||0)-(weekly[m]||0)}))
+    .filter(x=>x.want===0?(x.have===0):x.gap>=Math.max(2,x.want*0.34))
+    .sort((a,b)=>(b.want?b.gap/b.want:2)-(a.want?a.gap/a.want:2));
+  const thin=deficits[0];
+  if(thin){
     const list=pick(thin.m,3);
-    if(list.length) return {reason:`${MUSCLE_LABEL[thin.m]||thin.m} has had ${thin.sets} set${thin.sets===1?'':'s'} in the last seven days, the least of anything you train.`,list,muscle:thin.m};
+    if(list.length) return {list,muscle:thin.m,reason:thin.want===0
+      ? `${MUSCLE_LABEL[thin.m]||thin.m} is not in your programme at all any more and has had no work this week.`
+      : `${MUSCLE_LABEL[thin.m]||thin.m} has had ${thin.have} of the ${thin.want} sets your programme asks for this week — the biggest shortfall you have.`};
   }
   return {enough:'Today covered what it was meant to. Extra sets now cost recovery you will want for the next session.'};
 }
@@ -1936,18 +1960,55 @@ function renderAlternatives(ex,groupId,baseId){
     + `<div class="swap-tier"><div class="swap-h other">Everything else<span>Counts against your session grade if it unbalances the day</span></div>
        <button class="secondary block" data-action="session-swap" data-group="${esc(groupId)}" data-base="${esc(baseId)}">Browse all ${BANK.length} movements</button></div>`;
 }
+/* Progressive overload, wired into the screen rather than left to memory. Two
+   things are worth interrupting for: going backwards, and standing still. */
+const GRIND=[
+  'You are going to have to suffer a little to get where you want to be. — David Goggins',
+  'The only way you gain mental strength is doing things you are not happy doing. — David Goggins',
+  'Motivation is crap. Motivation comes and goes. — David Goggins',
+  'You have to build calluses on your brain. — David Goggins',
+  'Nobody cares what you did yesterday. What have you done today? — David Goggins'
+];
+function overloadNudge(ex){
+  if(!state.session||ex.scoreMode==='reps') return null;
+  const d=state.session.draft[ex.id]; if(!d) return null;
+  const hist=sessionsForEx(ex); if(!hist.length) return null;
+  const lastEntry=hist[hist.length-1].entry;
+  const lastW=representativeLoad(lastEntry);
+  const cur=Number(d.weight)||0;
+  if(!(lastW>0)) return null;
+  if(cur < lastW-0.01){
+    return {tone:'down',title:`${fmtKg(lastW)} last time. ${fmtKg(cur)} today.`,
+      text:GRIND[Math.floor(Date.now()/86400000)%GRIND.length]};
+  }
+  /* Three exposures at one load is a plateau whatever the reps say. */
+  const loads=hist.slice(-3).map(h=>representativeLoad(h.entry));
+  if(loads.length>=3 && loads.every(w=>Math.abs(w-lastW)<0.01) && cur<=lastW+0.01){
+    const inc=Number(ex.inc||2.5);
+    const topped=(lastEntry.reps||[]).every(r=>r>=Number(ex.max));
+    return {tone:'hold',title:`Three sessions stuck at ${fmtKg(lastW)}.`,
+      text: topped
+        ? `You have been at the top of the rep range for three sessions. Put it up to ${fmtKg(lastW+inc)}.`
+        : `Add a rep to every set today, or go to ${fmtKg(lastW+inc)} and start again at ${ex.min}.`};
+  }
+  return null;
+}
 function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
+  const hasHistory=hasExerciseHistory(ex);
+  const nudge=overloadNudge(ex);
   const d=state.session?.draft?.[ex.id]||targetEntry(ex),done=state.session?.setDone?.[ex.id]||[],last=latestEntryFor(ex),target=targetEntry(ex),score=scoreFromEntry(ex,last),earned=(d.reps||[]).every(r=>r>=ex.max),weakR=Math.min(...(d.reps||[ex.min])),fill=clamp((weakR-ex.min)/Math.max(1,ex.max-ex.min),0,1),warmups=Array.isArray(d.warmups)?d.warmups:[];
   const plates=ex.equipment==='barbell'&&Number(d.weight)>Number(state.settings.barWeight||20)?plateFor(d.weight):null;
   /* Order is the design: identity, load, then the set log. Everything you
      only occasionally need — adjustments, the demo, the cues — sits behind a
      disclosure so the card ends at the thing you actually came to tap. */
   return `<article class="exercise" id="ex-${esc(ex.id)}">
-  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}${target.backedOff?'<span style="color:var(--gold2)">Load reduced — last time fell under '+ex.min+' reps</span> · ':''}Last ${esc(fmtEntry(last))} · aim ${ex.min}-${ex.max} reps${ex.rir!=null?` · leave ${ex.rir} in reserve`:''}${ex.rest?` · rest ${Math.round(ex.rest/15)*15}s`:''}</div></div></div>
-  <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div></div>
+  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}${target.backedOff?'<span style="color:var(--gold2)">Load reduced — last time fell under '+ex.min+' reps</span> · ':''}${hasHistory?`Last ${esc(fmtEntry(last))}`:'Never logged — suggested start'} · aim ${ex.min}-${ex.max} reps${ex.rir!=null?` · leave ${ex.rir} in reserve`:''}${ex.rest?` · rest ${Math.round(ex.rest/15)*15}s`:''}</div>
+  ${nudge?`<div class="nudge ${nudge.tone}"><strong>${esc(nudge.title)}</strong><div>${esc(nudge.text)}</div></div>`:''}</div></div>
+  <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div>
+  ${ex.equipment==='barbell'?`<div><div class="step-label">Plates per side</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="-1" aria-label="Less per side">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="1.25" min="0" max="250" value="${perSide(d.weight)}" data-num="perSide" data-ex="${ex.id}" aria-label="Plates per side in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="1" aria-label="More per side">+</button></div><div class="plates small faint">${barKg()}KG bar + 2 × ${perSide(d.weight)} = ${fmtKg(d.weight)}</div></div>`:''}</div>
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
-  <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,last.reps?.[i]??last.reps?.[0]??ex.min,Boolean(done[i]))).join('')}</div>
+  <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,hasHistory?(last.reps?.[i]??last.reps?.[0]??ex.min):null,Boolean(done[i]))).join('')}</div>
   ${(()=>{const f=failureSet(ex,dayIndex);return f?`<div class="failure-note ${f.go?'go':'hold'}">${esc(f.why)}</div>`:''})()}
   ${panel(ex.id+':adjust','Adjust',`<div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">Add set</button><button class="mini-btn" data-action="remove-set" data-ex="${ex.id}">Remove set</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">Add warmup</button>${warmups.length?`<button class="mini-btn" data-action="remove-warmup" data-ex="${ex.id}">Remove warmup</button>`:''}<button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button></div>`)}
   ${panel(ex.id+':tech','How to do this properly',renderTechnique(ex))}
@@ -1976,7 +2037,7 @@ function renderSetRow(ex,i,r,prev,done){
   const rpeBtn=adv?`<button class="rpe-btn ${rpe?'on':''}" data-action="rpe" data-ex="${ex.id}" data-index="${i}" title="Tap to cycle effort (RPE)" aria-label="Set ${i+1} RPE">${rpe?('@'+rpe):'RPE'}</button>`:'';
   const last=(state.session?.draft?.[ex.id]?.reps||[]).length-1===i;
   const fail=last?failureSet(ex,state.session?.dayIndex):null;
-  return`<div class="setrow ${done?'done':''} ${adv?'adv':''} ${fail&&fail.go?'to-failure':''}"><div class="setn">SET ${i+1}${fail?`<span class="setn-tag ${fail.go?'go':'hold'}">${fail.go?'FAILURE':'LEAVE 1-2'}</span>`:''}</div><div class="prev">PREV<br>${prev}</div><div class="rep-step"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="-1" aria-label="Decrease reps">−</button><input class="rep-val num-in" inputmode="numeric" type="number" step="1" min="0" max="100" value="${r}" data-num="reps" data-index="${i}" data-ex="${ex.id}" aria-label="Set ${i+1} reps"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="1" aria-label="Increase reps">+</button></div>${rpeBtn}<button class="set-log ${done?'is-done':''}" data-action="logset" data-ex="${ex.id}" data-index="${i}">${done?'✓ Done':'Log'}</button></div>`}
+  return`<div class="setrow ${done?'done':''} ${adv?'adv':''} ${fail&&fail.go?'to-failure':''}"><div class="setn">SET ${i+1}${fail?`<span class="setn-tag ${fail.go?'go':'hold'}">${fail.go?'FAILURE':'LEAVE 1-2'}</span>`:''}</div><div class="prev">${prev==null?'&mdash;':'PREV<br>'+prev}</div><div class="rep-step"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="-1" aria-label="Decrease reps">−</button><input class="rep-val num-in" inputmode="numeric" type="number" step="1" min="0" max="100" value="${r}" data-num="reps" data-index="${i}" data-ex="${ex.id}" aria-label="Set ${i+1} reps"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="1" aria-label="Increase reps">+</button></div>${rpeBtn}<button class="set-log ${done?'is-done':''}" data-action="logset" data-ex="${ex.id}" data-index="${i}">${done?'✓ Done':'Log'}</button></div>`}
 
 function renderMaxChart(){const rows=uniqueExercises().map(ex=>{const curr=entryEst(ex,latestEntryFor(ex)),avg=entryEst(ex,averageEntry(ex)),goal=goalEst(ex),scale=Math.max(goal,avg,curr,1)*1.1;return`<div class="stat-row" data-action="exercise" data-ex="${ex.id}"><div class="stat-top"><div><div class="stat-name">${esc(ex.name)}</div><div class="small faint">Current ${Math.round(curr)} · Reference ${Math.round(avg)} · Goal ${Math.round(goal)}</div></div><div class="stat-num" style="color:${scoreColor(scoreFromEntry(ex,latestEntryFor(ex)))}">${scoreFromEntry(ex,latestEntryFor(ex))}</div></div><div class="stat-bar"><span class="stat-average" style="width:${clamp(avg/scale*100,0,100)}%"></span><span class="stat-current" style="width:${clamp(curr/scale*100,0,100)}%"></span><span class="stat-goal" style="left:${clamp(goal/scale*100,0,100)}%"></span></div></div>`}).join('');return`<div class="card"><div class="legend"><span><i class="dot" style="background:var(--series)"></i>Current est max</span><span><i class="dot" style="background:rgba(var(--ink-rgb),.14)"></i>Reference</span><span><i class="dot" style="background:var(--ink2)"></i>Goal</span></div>${rows}</div>`}
 
@@ -2338,6 +2399,7 @@ app.addEventListener('click',e=>{
 app.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.action==='note'&&state.session){state.session.note=t.value;programSaveSoon()}
+  else if(t.dataset.num==='weight'||t.dataset.num==='perSide'){setDirect(t.dataset.ex,t.dataset.num,0,t.value);render()}   // the paired box has to follow
   else if(t.dataset.num){setDirect(t.dataset.ex,t.dataset.num,Number(t.dataset.index||0),t.value)}   // no re-render: keeps focus
   else if(t.dataset.programField){updateProgramField(t.dataset.ex,t.dataset.programField,t.value)}    // no re-render: keeps focus
   else if(t.dataset.syncField){state.settings[t.dataset.syncField]=t.value.trim();programSaveSoon()}
