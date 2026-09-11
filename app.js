@@ -942,10 +942,6 @@ function plateFor(weight){
   for(const p of plates){ while(side>=p-.01){out.push(p);side-=p} }
   return {bar,perSide:out,rem:Math.round(side*100)/100};
 }
-function achievementPointsForThreshold(t){return t>=70?60:t>=60?40:t>=50?25:t>=40?15:10}
-
-/* ============ PORTFOLIO ANALYTICS (v2.1) — weight×reps only, no new inputs ============ */
-const WK_MS = 6048e5;                                 // one week in ms
 function e1rmSeries(ex){return sessionsForEx(ex).map(x=>({t:x.session.timestamp||0,date:x.session.date,v:entryEst(ex,x.entry)})).filter(p=>p.v>0);}
 function linFit(vals){const n=vals.length;if(n<2)return null;const mx=(n-1)/2,my=vals.reduce((a,b)=>a+b,0)/n;let sxy=0,sxx=0;for(let i=0;i<n;i++){sxy+=(i-mx)*(vals[i]-my);sxx+=(i-mx)*(i-mx)}const slope=sxx?sxy/sxx:0,intercept=my-slope*mx;const resid=vals.map((y,i)=>y-(slope*i+intercept));const rsd=Math.sqrt(resid.reduce((a,r)=>a+r*r,0)/n)||1e-9;return{slope,intercept,resid,rsd};}
 /* Per-lift "position": valuation (e1RM), return, volatility, consistency, drawdown, rating. */
@@ -972,20 +968,6 @@ function plateauStat(ex){const st=liftStats(ex);if(!st.ready||st.n<4)return{flag
    nothing to do, so it takes the green. BUY is strength, so it takes gold. */
 function ratingColor(r){return r==='BUY'?'var(--series)':r==='HOLD'?'var(--ok)':r==='REDUCE'?'var(--risk)':r==='SWAP'?'var(--series2)':'var(--faint)';}
 function pctStr(x,dp){return (x>=0?'+':'')+(x*100).toFixed(dp==null?1:dp)+'%';}
-/* Portfolio-level: net-worth (OVR) curve, drawdown, CAGR, and volume allocation vs target. */
-function portfolioSummary(){
-  const tl=scoreTimeline();
-  const lifts=uniqueExercises().map(ex=>liftStats(ex));
-  let nw=null,peak=null,dd=null,cagr=null,weeks=null;
-  if(tl.length>=2){const v=tl.map(x=>x.overall);nw=v[v.length-1];peak=Math.max(...v);dd=peak>0?(nw-peak)/peak:0;weeks=Math.max(.3,(tl[tl.length-1].timestamp-tl[0].timestamp)/WK_MS);cagr=Math.pow(Math.max(1,nw)/Math.max(1,v[0]),1/(weeks/4))-1;}
-  const cutoff=Date.now()-28*864e5;const ton={};MUSCLES.forEach(m=>ton[m]=0);
-  for(const s of sortedSessions())if((s.timestamp||0)>=cutoff)for(const id in s.entries){const ex=exById(id);if(ex.scoreMode==='reps')continue;ton[ex.muscle]=(ton[ex.muscle]||0)+volumeEntry(s.entries[id]);}
-  const total=Object.values(ton).reduce((a,b)=>a+b,0)||1;
-  const activeN=MUSCLES.filter(m=>ton[m]>0).length||1;const target=1/activeN;
-  const alloc=MUSCLES.map(m=>({m,ton:ton[m],share:ton[m]/total,drift:ton[m]/total-(ton[m]>0?target:0)}));
-  return{tl,lifts,nw,peak,dd,cagr,weeks,alloc,total,target};
-}
-/* What-if optimizer: rank each lift's next target by its leverage on OVR (efficient frontier). */
 function whatIf(){
   const base=computeProfile().overall;const cur=currentEntries();
   return uniqueExercises().map(ex=>{const t=targetEntry(ex);const e={...cur};e[ex.id]=t;const next=profileFromEntries(e).overall;return{ex,t,delta:Math.round((next-base)*10)/10};}).filter(x=>x.delta>0).sort((a,b)=>b.delta-a.delta);
@@ -1011,8 +993,6 @@ function analystNote(){
 }
 function hasMeaningfulUnsavedData(){if((state.sessions||[]).length<2&&!state.settings.programUpdatedAt)return false;const lastChange=latestSignificantChange();if(!lastChange)return false;const anchor=Math.max(state.settings.lastExportAt?new Date(state.settings.lastExportAt).getTime():0,state.settings.lastSyncAt?new Date(state.settings.lastSyncAt).getTime():0);if(!anchor)return true;return lastChange>anchor}
 function latestSignificantChange(){const sessionTime=Math.max(0,...(state.sessions||[]).map(s=>Number(s.timestamp)||0));const dataChange=state.settings.lastDataChangeAt?new Date(state.settings.lastDataChangeAt).getTime():0;const programChange=state.settings.programUpdatedAt?new Date(state.settings.programUpdatedAt).getTime():0;return Math.max(sessionTime,dataChange,programChange)}
-
-function achievements(){const p=computeProfile(),sum=trainingSummary(),ach=[];const add=(g,n,d,ok,need,pts)=>ach.push({g,n,d,ok,need,pts});const sessions=sum.total;[1,2,3,5,8,12,16,20,24,28,32,36,40,44,48].forEach((n,i)=>add('Consistency',`${n} Session${n===1?'':'s'}`,`Log ${n} completed workout${n===1?'':'s'}.`,sessions>=n,`${sessions}/${n}`,i<4?10:i<9?20:35));[1,3,6].forEach((r,i)=>{const count=Math.min(...state.program.map((d,di)=>state.sessions.filter(s=>s.dayIndex===di).length));add('Consistency',`${r} Full Rotation${r===1?'':'s'}`,`Complete every day of the cycle ${r} time${r===1?'':'s'}.`,count>=r,`${count}/${r}`,i===0?20:i===1?35:55)});const ws=weekStreak();[2,4,8,12].forEach((n,i)=>add('Consistency',`${n} Week Streak`,`Hold a streak of ${n} consecutive weeks with 3+ sessions.`,ws>=n,`${ws}/${n}`,i<2?25:50));[36,38,40,42,45,48,50,55,60,65,70,75].forEach(t=>add('Overall',`${t} OVR`,`Reach ${t} overall.`,p.overall>=t,`${p.overall}/${t}`,achievementPointsForThreshold(t)));radarAxes().forEach(a=>[40,45,50,55,60].forEach(t=>add('Muscle Profile',`${a.label} ${t}`,`Reach ${t} score for ${a.label.toLowerCase()}.`,(p[a.key]||0)>=t,`${p[a.key]||0}/${t}`,achievementPointsForThreshold(t))));uniqueExercises().forEach(ex=>{const sc=scoreFromEntry(ex,latestEntryFor(ex));add('Exercise Scores',`${ex.name} 45`,`Reach 45 score on ${ex.name}.`,sc>=45,`${sc}/45`,20)});const prCount=sum.prs;[1,3,5,8,12,16,20,25,30,40].forEach((n,i)=>add('PRs',`${n} PR${n===1?'':'s'}`,`Record ${n} personal record${n===1?'':'s'}.`,prCount>=n,`${prCount}/${n}`,i<3?15:i<7?30:50));const week=weeklyWindow(),weeklyVol=totalVolumeForSessions(week),completeDays=new Set(week.map(s=>s.dayIndex)).size;[[2,'Two Session Week'],[3,'Three Session Week'],[4,'Four Session Week']].forEach(([n,label],i)=>add('Discipline',label,`Log ${n} sessions in the last 7 days.`,week.length>=n,`${week.length}/${n}`,15+i*10));add('Discipline','Balanced Week','Train all three days in the last 7 days.',completeDays>=3,`${completeDays}/3`,35);add('Discipline','Volume Base','Lift 3000KG total volume in the last 7 days.',weeklyVol>=3000,`${weeklyVol}/3000`,20);add('Discipline','Volume Push','Lift 5000KG total volume in the last 7 days.',weeklyVol>=5000,`${weeklyVol}/5000`,35);add('Discipline','Volume Surge','Lift 7500KG total volume in the last 7 days.',weeklyVol>=7500,`${weeklyVol}/7500`,55);add('Discipline','Clean Data','Back up after meaningful logged progress.',!hasMeaningfulUnsavedData()&&sessions>=2,hasMeaningfulUnsavedData()?'Backup Needed':'Saved',20);add('Discipline','Program Owner','Customize the editable program at least once.',Boolean(state.settings.programUpdatedAt),state.settings.programUpdatedAt?'Done':'Not Yet',20);add('Discipline','Two Device Sync','Set up cloud sync so phone and laptop share one ledger.',Boolean(state.settings.gistId&&state.settings.gistToken),state.settings.gistId?'Done':'Not Yet',25);return ach.slice(0,120)}
 
 function compareToPrevious(dayIndex,entries){const prev=previousSameDay(dayIndex);const day=planDay(dayIndex);const active=state.session?sessionExercises(day):day.groups.flatMap(g=>g.exercises);const removed=(state.session?.removedExercises||[]).map(exById);const exercises=[...active,...removed];const lines=[];let up=0,down=0,held=0,total=0;for(const ex of exercises){const nowE=entries[ex.id]||baselineEntry(ex);const prevE=prev?.entries?.[ex.id]||baselineEntry(ex);const strength=(entryEst(ex,nowE)-entryEst(ex,prevE))/Math.max(1,entryEst(ex,prevE));const vol=(volumeEntry(nowE)-volumeEntry(prevE))/Math.max(1,volumeEntry(prevE));const index=strength*.72+vol*.28;const dir=index>.015?'up':index<-.015?'down':'held';if(dir==='up')up++;else if(dir==='down')down++;else held++;total+=index;lines.push({id:ex.id,name:ex.name,strength,vol,index,dir})}const avg=total/Math.max(1,lines.length);let grade='C';if(!prev&&Math.abs(avg)<.012)grade='BASE';else if(avg>=.08)grade='S';else if(avg>=.045)grade='A';else if(avg>=.018)grade='B';else if(avg>=-.015)grade='C';else if(avg>=-.045)grade='D';else grade='F';return{prev,first:!prev,lines,up,down,held,avg,grade}}
 function detectPRs(entries){const prs=[];for(const id in entries){const ex=exById(id);const before=bestEntryFor(ex).entry;const curr=entries[id];if(entryEst(ex,curr)>entryEst(ex,before)+.1)prs.push({id,name:ex.name,kind:'Estimated Max',old:Math.round(entryEst(ex,before)*10)/10,now:Math.round(entryEst(ex,curr)*10)/10});if(volumeEntry(curr)>volumeEntry(before)+.1&&ex.scoreMode!=='reps')prs.push({id,name:ex.name,kind:'Volume',old:Math.round(volumeEntry(before)),now:Math.round(volumeEntry(curr))})}return prs}
@@ -1940,14 +1920,11 @@ function renderHome(){
   <div class="card body"><div><strong>Bodyweight</strong><div class="small faint">${state.bodyLog.length?`Logged ${state.bodyLog.length} times · last ${esc(state.bodyLog[state.bodyLog.length-1].date)}`:'Tap + / − then Log to build a trend.'}</div></div><div class="body-controls"><button class="secondary" data-action="bw" data-dir="-1" aria-label="Decrease bodyweight">−</button><div class="pill">${bodyweight()}KG</div><button class="secondary" data-action="bw" data-dir="1" aria-label="Increase bodyweight">+</button><button class="secondary gold" data-action="bw-log">Log</button></div></div>
   ${state.bodyLog.length>1?`<div class="card">${renderTrendSvgRaw(state.bodyLog.map(x=>({value:x.kg,date:x.date})),null,'KG')}</div>`:''}
   </div>
-  <div class="section"><h2>Command center</h2><span>Tools</span></div>
+  <div class="section"><h2>More</h2><span>Occasional</span></div>
   <div class="tool-grid">
     <button class="tool" data-action="weekly"><span class="tool-ic">${icon('coach')}</span><strong>Coach & tracker</strong><span>Weekly review, weak points, deload and projection.</span></button>
     <button class="tool" data-action="prs"><span class="tool-ic">${icon('pr')}</span><strong>PR timeline</strong><span>Every personal record in order, with values.</span></button>
-    <button class="tool" data-action="achievements"><span class="tool-ic">${icon('star')}</span><strong>Achievements</strong><span>Points and long-term milestones.</span></button>
     <button class="tool" data-action="program"><span class="tool-ic">${icon('edit')}</span><strong>Edit program</strong><span>Swap exercises from the bank, change sets, reps and loads.</span></button>
-    <button class="tool" data-action="portfolio"><span class="tool-ic">${icon('portfolio')}</span><strong>Strength portfolio</strong><span>Lifts as positions: returns, volatility, drawdown, ratings.</span></button>
-    <button class="tool" data-action="analyst"><span class="tool-ic">${icon('analyst')}</span><strong>Analyst desk</strong><span>Research note on your body + highest-leverage next move.</span></button>
     <button class="tool" data-action="data"><span class="tool-ic">${icon('data')}</span><strong>Data center</strong><span>Cloud sync, snapshots, export, import.</span></button>
   </div></div>`;
 }
@@ -2211,8 +2188,6 @@ function renderExerciseDetail(){const ex=exById(selectedExId),pts=trendPoints(ex
 
 function renderPRs(){const feed=prFeed();return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('home')}<button class="back" data-action="home">‹ Home</button><section class="hero"><div class="eyebrow">PR timeline</div><div class="title">${feed.length} record${feed.length===1?'':'s'}</div><div class="sub">Every personal record, newest first.</div></section><div class="card flat">${feed.length?feed.map(p=>`<div class="row"><div><strong>${esc(p.name)}</strong><div class="small faint">${esc(p.date)} · Day ${esc(p.day)} · ${esc(p.kind)}</div></div><div class="mono" style="color:var(--gold2)">${p.old}→${p.now}</div></div>`).join(''):'<div class="small faint">No PRs yet. They appear automatically when a logged session beats your best.</div>'}</div></div>`}
 
-function renderAchievements(){const ach=achievements(),groups=[...new Set(ach.map(a=>a.g))],earned=ach.filter(a=>a.ok).reduce((s,a)=>s+a.pts,0),total=ach.reduce((s,a)=>s+a.pts,0),unlocked=ach.filter(a=>a.ok).length;return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('home')}<button class="back" data-action="home">‹ Home</button><section class="hero"><div class="eyebrow">Achievement layer</div><div class="title">${unlocked}/${ach.length}</div><div class="sub">${earned}/${total} points unlocked. Milestones span 3 to 4 months of consistent training; harder goals are worth more.</div></section>${groups.map(g=>`<div class="section"><h2>${esc(g)}</h2><span>${ach.filter(a=>a.g===g&&a.ok).length}/${ach.filter(a=>a.g===g).length}</span></div>${ach.filter(a=>a.g===g).map(a=>`<div class="ach ${a.ok?'unlocked':''}"><div><div class="ach-title">${esc(a.n)}</div><div class="ach-sub">${esc(a.d)}</div></div><div class="ach-side"><div class="ach-pts">${a.pts} pts</div><div class="ach-badge">${a.ok?'Unlocked':esc(a.need)}</div></div></div>`).join('')}`).join('')}</div>`}
-
 function renderHistory(){
   const q=historyQuery.trim().toLowerCase();
   const list=sortedSessions().slice().reverse().filter(s=>{if(!q)return true;const day=planDay(s.dayIndex);const names=Object.keys(s.entries).map(id=>exNameIn(s,id)).join(' ').toLowerCase();return s.date.includes(q)||String(s.day).toLowerCase().includes(q)||(day?.name||'').toLowerCase().includes(q)||names.includes(q)||(s.note||'').toLowerCase().includes(q)});
@@ -2304,31 +2279,6 @@ function renderData(){
 function renderReport(){const r=state.lastReport;if(!r){view='home';return renderHome()}const good=['S','A'].includes(r.grade);return`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('report')}<section class="hero report-hero"><div class="eyebrow">Workout report</div><div class="report-grade ${good?'good':''}">${esc(r.grade)}</div><div class="report-narr">${esc(r.narrative)}</div><div class="report-sub mono">OVR ${r.overall} (${r.delta>=0?'+':''}${r.delta}) · ${r.comp.up}↑ ${r.comp.held}→ ${r.comp.down}↓ · ${r.completion}% · ${r.durationMin} min · ${r.volume||0}KG${r.rpe?` · @${r.rpe} RPE`:''}</div>${r.prs?.length?`<div class="pr"><strong>New PRs:</strong> ${r.prs.slice(0,5).map(p=>`${esc(p.name)} ${esc(p.kind)} ${p.old}→${p.now}`).join(' · ')}</div>`:''}${r.balance&&r.balance.penalty?`<div class="banner warn" style="margin:12px 0"><strong>Unbalanced session</strong><div>${esc(balanceNote(r.balance))}</div></div>`:''}<div class="feedback"><div class="feedback-title">What to improve next time</div><ol class="feedback-list">${r.feedback.map(x=>`<li>${esc(x)}</li>`).join('')}</ol></div><button class="primary" data-action="summary">Open summary sheet</button><button class="secondary block" data-action="home">Back home</button></section><div class="section"><h2>Movement deltas</h2><span>Vs ${r.first?'baseline':'last same day'}</span></div><div class="card flat">${r.comp.lines.map(l=>`<div class="row"><div><strong>${esc(l.name)}</strong><div class="small faint">Strength ${Math.round(l.strength*1000)/10}% · Volume ${Math.round(l.vol*1000)/10}%</div></div><div class="mono" style="color:${l.dir==='up'?'var(--series)':l.dir==='down'?'var(--risk)':'var(--muted)'}">${l.index>=0?'+':''}${Math.round(l.index*1000)/10}%</div></div>`).join('')}</div></div>`}
 
 /* ---- Original 1: Strength Portfolio ---- */
-function renderPortfolio(){
-  const ps=portfolioSummary();
-  const ready=ps.lifts.filter(l=>l.ready);
-  const head=`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('summary')}<button class="back" data-action="home">‹ Home</button>`;
-  if(ready.length<1){
-    return head+`<section class="hero"><div class="eyebrow">Strength portfolio</div><div class="title">Coverage opens soon</div><div class="sub">Every lift becomes a rated position after two logged sessions. Log a full rotation to open the book.</div></section><div class="card"><div class="small faint">No positions yet. Start a session from Home — returns, volatility, drawdown and ratings appear here automatically.</div></div></div>`;
-  }
-  const sorted=ready.slice().sort((a,b)=>b.mean-a.mean);
-  const rows=sorted.map(l=>`<button class="pos-row" data-action="exercise" data-ex="${l.ex.id}"><div class="pos-top"><div class="pos-name">${esc(l.ex.name)}</div><div class="rating" style="color:${ratingColor(l.rating)}">${l.rating}</div></div><div class="pos-stats"><div class="pstat"><div class="v">${Math.round(l.cur)}</div><div class="k">e1RM</div></div><div class="pstat"><div class="v" style="color:${l.mean>=0?'var(--series)':'var(--risk)'}">${pctStr(Math.max(-0.99,Math.min(0.99,l.mean)))}</div><div class="k">ret/wk</div></div><div class="pstat"><div class="v">${l.sharpe.toFixed(2)}</div><div class="k">consist</div></div><div class="pstat"><div class="v" style="color:${l.dd<=-.02?'var(--risk)':'var(--muted)'}">${(l.dd*100).toFixed(1)}%</div><div class="k">draw</div></div></div></button>`).join('');
-  const nwCard=ps.tl.length>=2?`<div class="card">${renderTrendSvgRaw(ps.tl.map(x=>({value:x.overall,date:x.date})),null,'OVR','tall')}</div>`:'';
-  const alloc=ps.alloc.filter(a=>a.share>0).sort((a,b)=>b.share-a.share);
-  const allocRows=alloc.map(a=>`<div class="alloc-row"><span class="alloc-name">${MUSCLE_LABEL[a.m]||a.m}</span><span class="alloc-bar"><i class="alloc-fill ${a.drift<-0.02?'under':''}" style="width:${clamp(a.share*100,0,100)}%"></i><i class="alloc-target" style="left:${clamp(ps.target*100,0,100)}%"></i></span><span class="alloc-num">${Math.round(a.share*100)}% · ${a.drift>=0?'+':''}${Math.round(a.drift*100)}%</span></div>`).join('');
-  const under=alloc.slice().sort((a,b)=>a.drift-b.drift)[0];
-  return head+`
-  <section class="hero"><div class="eyebrow">Strength portfolio</div><div class="level-head"><div><div class="title" style="color:${scoreColor(ps.nw||0)}">Net worth ${ps.nw!=null?ps.nw:'—'}</div><div class="sub">Your lifts as a book of positions. Valuation is estimated 1RM; return is its weekly rate of change.</div></div>${ps.dd!=null?`<div class="rank" style="color:${ps.dd<=-.02?'var(--risk)':'var(--ok)'}">${(ps.dd*100).toFixed(1)}% DD</div>`:''}</div></section>
-  <div class="grid3"><div class="metric"><div class="num">${ready.length}</div><div class="lab">Positions</div></div><div class="metric"><div class="num" style="color:${(ps.cagr||0)>=0?'var(--series)':'var(--risk)'}">${ps.cagr!=null?pctStr(ps.cagr,0):'—'}</div><div class="lab">CAGR / 4wk</div></div><div class="metric"><div class="num">${ps.peak!=null?ps.peak:'—'}</div><div class="lab">Peak OVR</div></div></div>
-  ${nwCard}
-  <div class="section"><h2>Positions</h2><span>Tap a lift</span></div>
-  <div class="card flat">${rows}</div>
-  <div class="section"><h2>Allocation</h2><span>Vol share vs even target</span></div>
-  <div class="card"><div class="small faint" style="margin-bottom:4px">Marker = balanced target. Grey bars are under-allocated.</div>${allocRows}${under&&under.drift<-0.03?`<div class="banner warn" style="margin-top:12px"><strong>Rebalance</strong><div>${MUSCLE_LABEL[under.m]||under.m} is ${Math.abs(Math.round(under.drift*100))}% under target. Add a set or shift a slot toward it in Edit program.</div></div>`:''}</div>
-  <button class="primary" data-action="analyst">Open analyst desk</button></div>`;
-}
-
-/* ---- Original 2: fitted progression model (used inside exercise detail) ---- */
 function renderProgressionModel(ex){
   const st=liftStats(ex);
   if(!st.ready)return `<div class="card"><strong>Progression model</strong><div class="small faint" style="margin-top:6px">Log this lift at least twice to fit a trend and forecast the path to your goal.</div></div>`;
@@ -2339,24 +2289,6 @@ function renderProgressionModel(ex){
 }
 
 /* ---- Original 3: Analyst desk (research note + what-if optimizer) ---- */
-function renderAnalyst(){
-  const a=analystNote();
-  const head=`<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('summary')}<button class="back" data-action="portfolio">‹ Portfolio</button>`;
-  if(!a.ready.length){
-    return head+`<section class="hero"><div class="eyebrow">Analyst desk</div><div class="title">No coverage yet</div><div class="sub">${esc(a.headline)}</div></section></div>`;
-  }
-  const liftLine=l=>`<div class="row"><div><strong>${esc(l.ex.name)}</strong><div class="small faint">e1RM ${Math.round(l.cur)} · consistency ${l.sharpe.toFixed(2)}</div></div><div class="mono" style="color:${l.mean>=0?'var(--series)':'var(--risk)'}">${pctStr(l.mean)}/wk</div></div>`;
-  const risk=l=>`<div class="row"><div><strong>${esc(l.ex.name)}</strong><div class="small faint">${l.dd<=-0.05?`${(l.dd*100).toFixed(0)}% off peak`:`plateau ${l.z.toFixed(1)} SD`}</div></div><button class="secondary" data-action="exercise" data-ex="${l.ex.id}">Open</button></div>`;
-  const wi=a.wi.map(x=>`<div class="row"><div><strong>${esc(x.ex.name)}</strong><div class="small faint">→ ${esc(fmtEntry(x.t))}</div></div><div class="mono" style="color:var(--gold2)">+${x.delta} OVR</div></div>`).join('');
-  return head+`
-  <section class="hero report-hero"><div class="eyebrow">Research note · ${esc(today())}</div><div class="note-head">Coverage: your strength book</div><div class="report-narr">${esc(a.headline)}</div><div class="report-sub mono">OVR ${a.ovr} · drawdown ${a.dd}% · CAGR ${a.cagr!=null?a.cagr+'%/4wk':'—'}</div></section>
-  <div class="section"><h2>Top movers</h2><span>Weekly return</span></div><div class="card flat">${a.movers.length?a.movers.map(liftLine).join(''):'<div class="small faint">No positive movers this window.</div>'}</div>
-  <div class="section"><h2>Laggards</h2><span>Weakest return</span></div><div class="card flat">${a.laggards.map(liftLine).join('')}</div>
-  ${a.risks.length?`<div class="section"><h2>Risk flags</h2><span>${a.risks.length}</span></div><div class="card flat">${a.risks.map(risk).join('')}</div>`:''}
-  <div class="section"><h2>What-if · highest leverage</h2><span>Next session</span></div><div class="card flat">${wi||'<div class="small faint">Log more sessions to rank moves.</div>'}</div>
-  <div class="card"><div class="note-head">Thesis</div><div class="small muted" style="margin-top:4px">${esc(a.thesis)}</div></div>
-  <button class="secondary gold block" data-action="export-note">Export research note</button></div>`;
-}
 function exportNote(){
   const a=analystNote();
   const L=[`# Brunian Lifts — research note (${today()})`,'',a.headline,'',`OVR ${a.ovr} · drawdown ${a.dd}% · CAGR ${a.cagr!=null?a.cagr+'%/4wk':'—'}`,'','## Top movers'];
@@ -2376,7 +2308,7 @@ function render(){
   try{
     const keepPosition=view==='workout';const scrollY=keepPosition?window.scrollY:0;
     CHARTS.clear();
-    const pages={home:renderHome,summary:renderSummary,weekly:renderWeekly,workout:renderWorkout,achievements:renderAchievements,history:renderHistory,editSession:renderEditSession,program:renderProgram,bank:renderBank,data:renderData,exercise:renderExerciseDetail,report:renderReport,prs:renderPRs,portfolio:renderPortfolio,analyst:renderAnalyst};
+    const pages={home:renderHome,summary:renderSummary,weekly:renderWeekly,workout:renderWorkout,history:renderHistory,editSession:renderEditSession,program:renderProgram,bank:renderBank,data:renderData,exercise:renderExerciseDetail,report:renderReport,prs:renderPRs};
     /* innerHTML destroys the focused control, so typing a rep count and having
        any handler re-render moved the caret to nowhere. Remember the field by
        its data attributes and put the caret back where it was. */
@@ -2413,7 +2345,7 @@ app.addEventListener('click',e=>{
   if(t.dataset.bankMuscle!==undefined){bankFilter.muscle=t.dataset.bankMuscle;render();return}
   if(t.dataset.bankEquip!==undefined){bankFilter.equipment=t.dataset.bankEquip;render();return}
   const a=t.dataset.action;
-  const nav={home:'home',summary:'summary',weekly:'weekly',history:'history',achievements:'achievements',program:'program',data:'data',prs:'prs',portfolio:'portfolio',analyst:'analyst',workout:'workout'};
+  const nav={home:'home',summary:'summary',weekly:'weekly',history:'history',program:'program',data:'data',prs:'prs',workout:'workout'};
   if(nav[a]){go(nav[a]);return}
   if(a==='exercise'){selectedExId=t.dataset.ex;go('exercise')}
   else if(a==='start')startSession(Number(t.dataset.day||state.currentDayIndex));
