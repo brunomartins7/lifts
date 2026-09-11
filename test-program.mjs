@@ -41,6 +41,7 @@ for (const d of days) {
     for (const o of sl.options) {
       assert.ok(byId[o], `unknown exercise id ${o}`);
       assert.ok(!LEGS.includes(byId[o].muscle), `${o} is lower body — this programme is upper body only`);
+      assert.notEqual(byId[o].muscle, 'core', `${o} is abdominal work — the owner removed it to fund the arms`);
     }
     const b = byId[sl.options[0]];
     tally[b.muscle] = (tally[b.muscle] || 0) + sl.sets;
@@ -53,10 +54,11 @@ for (const d of days) {
       `day ${d.id} puts incline straight after bench`);
   }
 }
-/* The coached allocation. Lower than a naive 3x6 grid on purpose: where a muscle
-   can land on consecutive days it takes two or three sets at 2-3 reps in reserve,
-   which is what makes variable training days survivable. */
-const AGREED = { back: 11, shoulders: 11, chest: 6, biceps: 4, triceps: 4, core: 4, forearms: 2 };
+/* The coached allocation. Sessions are never on back-to-back days, so every
+   muscle gets at least 48 hours and the volume is higher than the version that
+   had to survive three days running. No abdominal work: the owner removed it and
+   those slots went to the arms and forearms. */
+const AGREED = { shoulders: 19, back: 16, forearms: 9, chest: 8, biceps: 8, triceps: 8 };
 assert.deepEqual(tally, AGREED, `weekly direct sets drifted:\n  got ${JSON.stringify(tally)}\n  want ${JSON.stringify(AGREED)}`);
 
 /* ---- progression ---- */
