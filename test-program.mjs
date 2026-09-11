@@ -61,6 +61,31 @@ for (const d of days) {
    pulldown station, no pec deck, no T-bar, so the back is built from rows and a
    chin-up is offered only as an option. Free-weight biased by design. */
 const AGREED = { shoulders: 15, back: 12, chest: 9, biceps: 9, triceps: 9 };
+
+/* No exercise may fall on consecutive days. The rotation wraps, so C into A is a
+   consecutive pair too — that is the one that is easy to miss. */
+const byDay = Object.fromEntries(days.map(d => [d.id, d.groups.flatMap(g => g.slots.map(sl => sl.options[0]))]));
+for (const [x, y] of [['A','B'], ['B','C'], ['C','A']])
+  for (const e of byDay[x])
+    assert.ok(!byDay[y].includes(e), `${e} is on both ${x} and ${y}, which are consecutive sessions`);
+const everySlot = Object.values(byDay).flat();
+assert.equal(new Set(everySlot).size, everySlot.length, 'an exercise is used twice in the week');
+
+/* Every head he named has to be covered by something. */
+const used = new Set(everySlot);
+const covers = (label, ids) => assert.ok(ids.some(i => used.has(i)), `nothing covers ${label}`);
+covers('upper chest',        ['dumbbell-incline-bench-press','barbell-incline-bench-press','dumbbell-incline-fly']);
+covers('mid/lower chest',    ['barbell-bench-press','dumbbell-bench-press','dumbbell-fly','cable-standing-fly']);
+covers('lats',               ['dumbbell-one-arm-bent-over-row','cable-seated-row','pull-up','chin-up']);
+covers('mid-back',           ['dumbbell-incline-row','cable-rope-seated-row','cable-seated-wide-grip-row']);
+covers('front delts',        ['dumbbell-seated-shoulder-press','barbell-seated-overhead-press','dumbbell-standing-overhead-press']);
+covers('lateral delts',      ['dumbbell-lateral-raise','cable-lateral-raise','cable-one-arm-lateral-raise','dumbbell-upright-row']);
+covers('rear delts',         ['dumbbell-reverse-fly','cable-standing-rear-delt-row-with-rope','dumbbell-rear-lateral-raise']);
+covers('biceps long head',   ['dumbbell-incline-curl']);
+covers('biceps short head',  ['dumbbell-concentration-curl','dumbbell-preacher-curl','barbell-preacher-curl']);
+covers('brachialis/forearm', ['dumbbell-hammer-curl','dumbbell-cross-body-hammer-curl','barbell-reverse-curl']);
+covers('triceps long head',  ['dumbbell-seated-triceps-extension','cable-overhead-triceps-extension-rope-attachment','dumbbell-standing-triceps-extension']);
+covers('triceps lat/medial', ['cable-pushdown-with-rope-attachment','cable-triceps-pushdown-v-bar','dumbbell-lying-triceps-extension']);
 const defaults = days.flatMap(d => d.groups.flatMap(g => g.slots.map(sl => byId[sl.options[0]])));
 const freeWeight = defaults.filter(b => b.equipment === 'barbell' || b.equipment === 'dumbbell').length;
 assert.ok(freeWeight >= 12, `only ${freeWeight} of ${defaults.length} default exercises are free weights; he asked for a free-weight programme`);
