@@ -268,7 +268,7 @@
     .rep-step{display:flex;align-items:center;gap:7px}
     .rep-step .step-btn{width:44px;height:44px;font-size:17px}
     .rep-val{font-size:23px;font-weight:700;padding:6px 2px;letter-spacing:-.6px}
-    .rpe-btn{height:42px;border:1px dashed var(--line);border-radius:var(--r-sm);background:transparent;color:var(--faint);font-family:var(--mono);font-weight:700;font-size:11px;transition:border-color .15s var(--e),color .15s var(--e)}
+    .rpe-btn{height:44px;border:1px dashed var(--line);border-radius:var(--r-sm);background:transparent;color:var(--faint);font-family:var(--mono);font-weight:700;font-size:11px;transition:border-color .15s var(--e),color .15s var(--e)}
     .rpe-btn.on{border-style:solid;border-color:var(--goldDim);color:var(--gold2);background:var(--goldGhost)}
     .set-log{min-height:44px;height:44px;border:1px solid var(--goldDim);border-radius:var(--r-sm);background:var(--goldGhost);color:var(--gold2);font-weight:800;font-size:12.5px;transition:background .15s var(--e)}
     .set-log.is-done{background:var(--okDim);border-color:rgba(var(--ok-rgb),.5);color:var(--ok)}
@@ -527,7 +527,7 @@
          slack: trim the label columns so the stepper's input keeps real width
          instead of collapsing to a sliver between the two buttons. */
       .setrow{grid-template-columns:44px minmax(0,1fr) 72px;gap:6px}
-      .setrow.adv{grid-template-columns:44px minmax(0,1fr) 40px 58px;gap:5px}
+      .setrow.adv{grid-template-columns:44px minmax(0,1fr) 48px 58px;gap:5px}
       .setrow.adv .rep-step .step-btn{width:44px;height:44px}
       .setrow.adv .rep-step{gap:4px}
       .setn b{font-size:14px}
@@ -544,6 +544,22 @@
       .calendar-nav{justify-content:space-between;margin-top:11px}
       .calendar-weekdays,.training-calendar{gap:4px}
       .cal-day{border-radius:8px;font-size:10px}
+    }
+
+    /* ============ Very narrow phones ============ */
+    /* Below about 360px the single-row set layout cannot hold two 44px
+       steppers, a 44px Log button and a readable rep number on one line — the
+       input collapses to roughly 26px, which cannot show two digits. The row
+       breaks in two instead: identity and action on top, the rep stepper
+       across the full width below. Nothing is removed and every target stays
+       44px. */
+    @media (max-width:360px){
+      .setrow{grid-template-columns:minmax(0,1fr) 78px;grid-template-areas:"setn log" "reps reps";gap:8px 9px;padding:10px 2px 10px 11px}
+      .setrow.adv{grid-template-columns:minmax(0,1fr) 52px 78px;grid-template-areas:"setn rpe log" "reps reps reps"}
+      .setn{grid-area:setn}
+      .rep-step{grid-area:reps}
+      .rpe-btn{grid-area:rpe}
+      .set-log{grid-area:log}
     }
 
     /* ============ Desktop / laptop: sidebar + multi-column ============ */
