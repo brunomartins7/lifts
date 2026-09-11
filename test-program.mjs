@@ -49,6 +49,15 @@ for (const d of days) {
     const b = byId[sl.options[0]];
     tally[b.muscle] = (tally[b.muscle] || 0) + sl.sets;
   }
+  /* One raise or fly a day, so the lateral raise is never done on a shoulder
+     already fatigued by another one, and one curl a day. Both are his rules. */
+  const kinds = d.groups.flatMap(g => g.slots.map(sl => patternOf(byId[sl.options[0]])));
+  const raises = kinds.filter(k => ['lateral-raise', 'rear-delt', 'fly'].includes(k)).length;
+  assert.ok(raises <= 1, `day ${d.id} has ${raises} raise or fly movements; one a day`);
+  const curls = d.groups.flatMap(g => g.slots.map(sl => byId[sl.options[0]]))
+                        .filter(b => b.muscle === 'biceps').length;
+  assert.ok(curls <= 1, `day ${d.id} has ${curls} biceps movements; one a day`);
+
   /* His two original complaints, pinned so a later edit cannot quietly undo them. */
   const pats = d.groups.flatMap(g => g.slots.map(sl => patternOf(byId[sl.options[0]])));
   for (let i = 0; i < pats.length - 1; i++) {
@@ -60,7 +69,7 @@ for (const d of days) {
 /* The coached allocation. Constrained by the equipment he actually has: no
    pulldown station, no pec deck, no T-bar, so the back is built from rows and a
    chin-up is offered only as an option. Free-weight biased by design. */
-const AGREED = { shoulders: 15, chest: 9, back: 9, biceps: 9, triceps: 9, forearms: 3 };
+const AGREED = { back: 12, shoulders: 12, chest: 9, triceps: 9, biceps: 6, forearms: 6 };
 
 /* No exercise may fall on consecutive days. The rotation wraps, so C into A is a
    consecutive pair too — that is the one that is easy to miss. */
@@ -80,10 +89,11 @@ covers('lats',               ['dumbbell-one-arm-bent-over-row','cable-seated-row
 covers('mid-back',           ['dumbbell-incline-row','cable-rope-seated-row','cable-seated-wide-grip-row','cable-seated-row','barbell-bent-over-row']);
 covers('front delts',        ['dumbbell-seated-shoulder-press','barbell-seated-overhead-press','dumbbell-standing-overhead-press']);
 covers('lateral delts',      ['dumbbell-lateral-raise','cable-lateral-raise','cable-one-arm-lateral-raise','dumbbell-upright-row']);
-covers('rear delts',         ['dumbbell-reverse-fly','cable-standing-rear-delt-row-with-rope','dumbbell-rear-lateral-raise']);
+covers('rear delts',         ['dumbbell-reverse-fly','cable-standing-rear-delt-row-with-rope','dumbbell-rear-lateral-raise','cable-cross-over-revers-fly']);
 covers('biceps',             ['dumbbell-standing-biceps-curl','barbell-curl','dumbbell-incline-curl']);
-covers('rear delts twice',   ['cable-cross-over-revers-fly','dumbbell-reverse-fly']);
+
 covers('brachialis',         ['dumbbell-cross-body-hammer-curl','dumbbell-hammer-curl']);
+covers('wrist flexors',      ['dumbbell-over-bench-wrist-curl','dumbbell-seated-palms-up-wrist-curl','barbell-wrist-curl']);
 covers('forearms',           ['barbell-reverse-curl','dumbbell-standing-reverse-curl','cable-reverse-curl']);
 covers('triceps long head',  ['dumbbell-seated-triceps-extension','cable-overhead-triceps-extension-rope-attachment','dumbbell-standing-triceps-extension']);
 covers('triceps lat/medial', ['cable-pushdown-with-rope-attachment','cable-triceps-pushdown-v-bar','dumbbell-lying-triceps-extension']);
