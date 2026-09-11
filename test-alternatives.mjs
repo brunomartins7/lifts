@@ -31,7 +31,7 @@ for (const ex of BANK) {
 
   for (const a of alts) {
     assert.notEqual(a.id, ex.id, `${where}: offered as its own alternative`);
-    assert.ok(!/^(lever-|sled-)|pulldown|smith-/.test(a.id),
+    assert.ok(!/^(lever-|sled-)|smith-|^cable-(pulldown|lateral-pulldown|underhand-pulldown)/.test(a.id),
       `${where}: offers ${a.id}, a machine he does not have`);
     assert.notEqual(a.clip, ex.clip, `${where}: alternative ${a.id} is the same movement under another id`);
     assert.equal(a.muscle, ex.muscle, `${where}: alternative ${a.id} trains ${a.muscle}, not ${ex.muscle}`);

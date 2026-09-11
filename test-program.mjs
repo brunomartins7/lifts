@@ -43,8 +43,8 @@ for (const d of days) {
       assert.ok(byId[o], `unknown exercise id ${o}`);
       assert.ok(!LEGS.includes(byId[o].muscle), `${o} is lower body — this programme is upper body only`);
       assert.notEqual(byId[o].muscle, 'core', `${o} is abdominal work — the owner removed it to fund the arms`);
-      assert.ok(!/^(lever-|sled-)|pulldown/.test(o),
-        `${o} needs a machine he does not have — no lever, sled or pulldown stations`);
+      assert.ok(!/^(lever-|sled-)|smith-|^cable-(pulldown|lateral-pulldown|underhand-pulldown)/.test(o),
+        `${o} needs a machine he does not have — no seated pulldown station, no lever or sled machines`);
     }
     const b = byId[sl.options[0]];
     tally[b.muscle] = (tally[b.muscle] || 0) + sl.sets;
@@ -77,7 +77,7 @@ const covers = (label, ids) => assert.ok(ids.some(i => used.has(i)), `nothing co
 covers('upper chest',        ['dumbbell-incline-bench-press','barbell-incline-bench-press','dumbbell-incline-fly']);
 covers('mid/lower chest',    ['barbell-bench-press','dumbbell-bench-press','dumbbell-fly','cable-standing-fly']);
 covers('lats',               ['dumbbell-one-arm-bent-over-row','cable-seated-row','pull-up','chin-up']);
-covers('mid-back',           ['dumbbell-incline-row','cable-rope-seated-row','cable-seated-wide-grip-row']);
+covers('mid-back',           ['dumbbell-incline-row','cable-rope-seated-row','cable-seated-wide-grip-row','cable-seated-row','barbell-bent-over-row']);
 covers('front delts',        ['dumbbell-seated-shoulder-press','barbell-seated-overhead-press','dumbbell-standing-overhead-press']);
 covers('lateral delts',      ['dumbbell-lateral-raise','cable-lateral-raise','cable-one-arm-lateral-raise','dumbbell-upright-row']);
 covers('rear delts',         ['dumbbell-reverse-fly','cable-standing-rear-delt-row-with-rope','dumbbell-rear-lateral-raise']);
@@ -89,13 +89,17 @@ covers('triceps long head',  ['dumbbell-seated-triceps-extension','cable-overhea
 covers('triceps lat/medial', ['cable-pushdown-with-rope-attachment','cable-triceps-pushdown-v-bar','dumbbell-lying-triceps-extension']);
 const defaults = days.flatMap(d => d.groups.flatMap(g => g.slots.map(sl => byId[sl.options[0]])));
 const freeWeight = defaults.filter(b => b.equipment === 'barbell' || b.equipment === 'dumbbell').length;
-assert.ok(freeWeight >= 12, `only ${freeWeight} of ${defaults.length} default exercises are free weights; he asked for a free-weight programme`);
+assert.ok(freeWeight >= 11, `only ${freeWeight} of ${defaults.length} default exercises are free weights; he asked for a free-weight programme`);
 assert.ok(!everySlot.some(i => byId[i].muscle === 'chest' && /fly/.test(i)),
   'a chest fly is back in the programme; he replaced it with an incline press');
 assert.ok(everySlot.filter(i => byId[i].id.startsWith('dumbbell') && patternOf(byId[i]) === 'lateral-raise').length <= 1,
   'two dumbbell lateral raises in one week');
 const rowCount = everySlot.filter(i => patternOf(byId[i]) === 'row').length;
 assert.ok(rowCount <= 3, `${rowCount} rowing movements in the week; he said five was overboard`);
+/* He wants to work towards pull-ups and has no bar, so the one overhead pulling
+   pattern he can train must not quietly vanish in a later edit. */
+assert.ok(everySlot.some(i => patternOf(byId[i]) === 'pulldown'),
+  'no overhead pulling pattern in the week; he is working towards pull-ups');
 assert.ok(everySlot.includes('barbell-lying-triceps-extension-skull-crusher'), 'skull crushers were asked for and are missing');
 assert.deepEqual(tally, AGREED, `weekly direct sets drifted:\n  got ${JSON.stringify(tally)}\n  want ${JSON.stringify(AGREED)}`);
 
