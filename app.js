@@ -286,6 +286,50 @@ function disambiguate(st){
   }
   if(st.settings) st.settings.ambiguousFixedAt=new Date().toISOString();
 }
+/* Applying a coached programme moved every slot from the original programme's
+   short ids (bench, cableRow, dbRow) to bank ids (barbell-bench-press,
+   cable-seated-row, dumbbell-one-arm-bent-over-row). Same movements, different
+   keys — which silently orphaned every session he had already logged. The app
+   then found no history and displayed the bank's starting figure in its place,
+   which is why a 55kg cable row vanished. Pairing comes from the demo clip,
+   which identifies the movement regardless of what the slot was called. */
+const LEGACY_IDS = {
+  bench:'barbell-bench-press', inclineDb:'dumbbell-incline-bench-press',
+  inclinePump:'dumbbell-incline-bench-press', shoulderPress:'dumbbell-seated-shoulder-press',
+  cableFly:'cable-standing-fly', pushdown:'cable-triceps-pushdown-v-bar',
+  frenchPress:'dumbbell-standing-triceps-extension', crossHammer:'dumbbell-cross-body-hammer-curl',
+  legRaise:'hanging-straight-leg-raise', dbRow:'dumbbell-one-arm-bent-over-row',
+  chestRow:'dumbbell-incline-row', facePull:'cable-standing-rear-delt-row-with-rope',
+  hammer:'dumbbell-hammer-curl', curl:'dumbbell-standing-biceps-curl',
+  curlC:'dumbbell-standing-biceps-curl', wristCurl:'dumbbell-seated-palms-up-wrist-curl',
+  ohp:'barbell-standing-close-grip-military-press', lateral:'dumbbell-lateral-raise',
+  cableRow:'cable-seated-row', tricepsWaist:'cable-overhead-triceps-extension-rope-attachment',
+  reverseCurl:'barbell-reverse-curl'
+};
+function relinkLegacyIds(st){
+  if(st.settings && st.settings.legacyRelinkedAt) return 0;
+  let moved=0;
+  const rename=(obj)=>{
+    if(!obj) return;
+    for(const oldId of Object.keys(obj)){
+      const newId=LEGACY_IDS[oldId];
+      if(!newId) continue;
+      /* Never overwrite a record already filed under the new id — two different
+         sessions could legitimately hold both. */
+      if(obj[newId]===undefined){ obj[newId]=obj[oldId]; moved++; }
+      delete obj[oldId];
+    }
+  };
+  for(const sess of (st.sessions||[])){ rename(sess.entries); rename(sess.meta); }
+  rename(st.exerciseIndex);
+  if(st.session) { rename(st.session.draft); rename(st.session.setDone); }
+  for(const day of (st.program||[])) for(const g of (day.groups||[])) for(const ex of (g.exercises||[])){
+    const newId=LEGACY_IDS[ex.id];
+    if(newId){ const b=BANK.find(x=>x.id===newId); if(b){ ex.id=newId; ex.name=b.name; ex.clip=b.clip; ex.muscle=b.muscle; ex.equipment=b.equipment; } }
+  }
+  if(st.settings) st.settings.legacyRelinkedAt=new Date().toISOString();
+  return moved;
+}
 function migrate(raw){
   const f = freshState();
   let n = {...f, ...(raw||{})};
@@ -302,6 +346,7 @@ function migrate(raw){
   delete n.sessionsLog; delete n.roundDone;
   delete n.__recoveredFrom; delete n.__quarantined; delete n.__fresh;   // transient flags — set per-load by loadState, never persisted
   disambiguate(n);
+  relinkLegacyIds(n);
   n.sessions = n.sessions.filter(s=>s&&s.entries).map(s=>normalizeSession(s,n));
   n.currentDayIndex = Number.isInteger(n.currentDayIndex)?clamp(n.currentDayIndex,0,n.program.length-1):0;
   if (n.session && n.session.dayIndex==null) n.session=null;
@@ -1357,10 +1402,11 @@ function addExtraExercise(bankId){
   const b=BANK.find(x=>x.id===bankId)||uniqueExercises().find(x=>x.id===bankId);
   if(!b) return;
   if(sessionExercises().some(x=>x.id===b.id)){flash('That exercise is already in this workout.');return}
-  const fresh={...b,sets:2,startReps:b.min,goalReps:b.max,cues:b.cues||[]};
+  const fresh={...b,sets:3,startReps:b.min,goalReps:b.max,cues:b.cues||[]};
   const t=muscleBasedTarget(fresh);
   if(t.estimatedFromMuscle)t.predictedWeight=t.weight;
-  t.reps=t.reps.slice(0,2);
+  while(t.reps.length<3)t.reps.push(t.reps[t.reps.length-1]||fresh.min);
+  t.reps=t.reps.slice(0,3);
   state.session.extras=[...(state.session.extras||[]),fresh];
   state.exerciseIndex[fresh.id]={...fresh};
   state.session.draft[fresh.id]=t;
@@ -1906,14 +1952,15 @@ function restFrac(){if(!restUntil||!restTotal)return 0;return Math.max(0,Math.mi
    done. Most of the time the honest answer is that the session was enough. */
 function renderExtraCard(){
   const sug=extraSuggestions();
-  if(!sug) return '';
-  if(sug.suppress) return '';
-  if(sug.enough) return `<div class="card extra-card"><div class="row" style="padding-top:0"><div><strong>Time for more?</strong><div class="small faint">${esc(sug.enough)}</div></div><div class="pill">Enough</div></div></div>`;
-  return `<div class="card extra-card"><div class="row" style="padding-top:0"><div><strong>Time for more?</strong><div class="small muted" style="margin-top:4px">${esc(sug.reason)}</div></div></div>
-  <div class="alt-list" style="margin-top:10px">${sug.list.map(b=>`<button class="alt-card direct" data-action="add-extra" data-extra="${esc(b.id)}">
-    <span class="alt-media"><img src="${CLIP_BASE+esc(b.clip||'')}" alt="" loading="lazy" onerror="this.style.display='none'"></span>
-    <span class="alt-copy"><span class="alt-name">${esc(b.name)}</span><span class="alt-meta">2 sets · ${b.min}-${b.max} reps · start ${esc(altPreview(b,2))}</span></span></button>`).join('')}</div>
-  <div class="small faint" style="margin-top:9px">Two sets. Extra work is logged and counts toward your weekly volume, but never against your session grade.</div></div>`;
+  if(!sug||sug.suppress) return '';
+  if(sug.enough) return `<div class="card extra-card"><div class="row" style="padding-top:0"><div><strong>Got time for more?</strong><div class="small faint">${esc(sug.enough)}</div></div><div class="pill">Enough</div></div></div>`;
+  const pick=sug.list[0];
+  /* One button. Deciding between three cards at the end of a session is a
+     decision he does not want to make; the app already knows which muscle is
+     short, so it should just say so and offer the work. */
+  return `<div class="card extra-card"><div class="row" style="padding-top:0"><div><strong>Got time for more?</strong><div class="small muted" style="margin-top:4px">${esc(sug.reason)}</div></div></div>
+  <button class="primary block" style="margin-top:11px" data-action="add-extra" data-extra="${esc(pick.id)}">Add 3 sets of ${esc(pick.name)}</button>
+  <div class="small faint" style="margin-top:8px">Starts at ${esc(altPreview(pick,3))}. Logged and counted toward your week, but it cannot lower your session grade.${sug.list.length>1?` Prefer something else? Swap it after adding, or browse the bank.`:''}</div></div>`;
 }
 function renderWorkout(){
   const day=planDay(openDay),c=completion();
@@ -2018,7 +2065,8 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   ${hasHistory?`<div class="lasttime"><span class="lasttime-lab">Beat this</span><span class="lasttime-val">${esc(fmtEntry(last))}</span><span class="lasttime-when">${esc(lastWhen)}</span></div>`:''}
   ${nudge?`<div class="nudge ${nudge.tone}"><strong>${esc(nudge.title)}</strong><div>${esc(nudge.text)}</div></div>`:''}</div></div>
   <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div>
-  ${ex.equipment==='barbell'?`<div><div class="step-label">Plates per side</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="-1" aria-label="Less per side">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="1.25" min="0" max="250" value="${perSide(d.weight)}" data-num="perSide" data-ex="${ex.id}" aria-label="Plates per side in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="1" aria-label="More per side">+</button></div><div class="plates small faint">${barKg()}KG bar + 2 × ${perSide(d.weight)} = ${fmtKg(d.weight)}</div></div>`:''}</div>
+  ${ex.equipment==='barbell'?`<div><div class="step-label">Plates each side</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="-1" aria-label="Less each side">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="1.25" min="0" max="250" value="${perSide(d.weight)}" data-num="perSide" data-ex="${ex.id}" aria-label="Plates each side in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="1" aria-label="More each side">+</button></div>
+  <div class="barline"><span>Bar</span><input class="bar-in num-in" inputmode="decimal" type="number" step="2.5" min="0" max="40" value="${barKg()}" data-setting="barWeight" aria-label="Bar weight in KG"><span class="barsum">+ ${perSide(d.weight)} + ${perSide(d.weight)} = <b>${fmtKg(d.weight)}</b> total</span></div></div>`:''}</div>
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,hasHistory?(last.reps?.[i]??last.reps?.[0]??ex.min):null,Boolean(done[i]))).join('')}</div>
@@ -2304,7 +2352,7 @@ function exportNote(){
 function renderConfirm(){if(!confirmBox)return'';return`<div class="confirm-overlay"><div class="confirm-box"><div class="eyebrow">Confirm</div><div class="confirm-title">${esc(confirmBox.title)}</div><div class="confirm-text">${esc(confirmBox.text)}</div><div class="confirm-actions"><button class="secondary" data-action="confirm-cancel">Cancel</button><button class="${confirmBox.danger?'danger-solid':'primary'} tight" data-action="confirm-ok">${esc(confirmBox.ok)}</button></div></div></div>`}
 
 let crashed=false;
-function renderCrash(err){return`<div class="shell"><div class="card banner bad" style="margin-top:40px"><strong>Something broke — your data is safe</strong><div class="small muted" style="margin:8px 0">${esc(String(err))}</div><div class="session-actions"><button class="secondary gold" data-action="crash-export">Download raw data</button><button class="secondary" data-action="crash-reload">Reload app</button></div></div></div>`}
+function renderCrash(err){return`<div class="shell"><div class="card banner bad" style="margin-top:40px"><strong>Something broke — your data is safe</strong><div class="small muted" style="margin:8px 0">${esc(String(err))}</div><div class="session-actions"><button class="secondary gold" data-action="crash-export">Download raw data</button><button class="secondary" data-action="crash-reload">Reload app</button><button class="secondary" data-action="home">Back home</button></div></div></div>`}
 function render(){
   try{
     const keepPosition=view==='workout';const scrollY=keepPosition?window.scrollY:0;
@@ -2416,6 +2464,7 @@ app.addEventListener('input',e=>{
   else if(t.dataset.num){setDirect(t.dataset.ex,t.dataset.num,Number(t.dataset.index||0),t.value)}   // no re-render: keeps focus
   else if(t.dataset.programField){updateProgramField(t.dataset.ex,t.dataset.programField,t.value)}    // no re-render: keeps focus
   else if(t.dataset.syncField){state.settings[t.dataset.syncField]=t.value.trim();programSaveSoon()}
+  else if(t.dataset.setting==='barWeight'&&view==='workout'){state.settings.barWeight=clamp(Number(t.value)||0,0,40);programSaveSoon();render()}
   else if(t.dataset.setting){state.settings[t.dataset.setting]=clamp(Number(t.value)||0,0,600);programSaveSoon()}
   else if(t.dataset.search==='history'){historyQuery=t.value;const card=document.querySelector('.card.flat');if(card){const scroll=window.scrollY;render();window.scrollTo(0,scroll);const inp=document.querySelector('[data-search="history"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}}}
   else if(t.dataset.search==='bank'){bankFilter.q=t.value;const scroll=window.scrollY;render();window.scrollTo(0,scroll);const inp=document.querySelector('[data-search="bank"]');if(inp){inp.focus();inp.setSelectionRange(inp.value.length,inp.value.length)}}
