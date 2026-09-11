@@ -36,6 +36,7 @@ for (const d of days) {
   assert.equal(slots.length, 6, `day ${d.id} has ${slots.length} exercises, expected 6`);
   for (const sl of slots) {
     assert.equal(sl.options.length, 3, `a slot in day ${d.id} offers ${sl.options.length} options, expected 3`);
+    assert.equal(sl.sets, 3, `a slot in day ${d.id} prescribes ${sl.sets} sets; he asked for three on every exercise`);
     assert.ok(sl.rir != null && sl.rir >= 0 && sl.rir <= 4, `a slot in day ${d.id} has no usable reps-in-reserve target`);
     assert.ok(sl.rest >= 30 && sl.rest <= 300, `a slot in day ${d.id} has no usable rest prescription`);
     for (const o of sl.options) {
@@ -59,7 +60,7 @@ for (const d of days) {
 /* The coached allocation. Constrained by the equipment he actually has: no
    pulldown station, no pec deck, no T-bar, so the back is built from rows and a
    chin-up is offered only as an option. Free-weight biased by design. */
-const AGREED = { back: 12, chest: 9, shoulders: 9, biceps: 6, triceps: 6 };
+const AGREED = { shoulders: 15, back: 12, chest: 9, biceps: 9, triceps: 9 };
 const defaults = days.flatMap(d => d.groups.flatMap(g => g.slots.map(sl => byId[sl.options[0]])));
 const freeWeight = defaults.filter(b => b.equipment === 'barbell' || b.equipment === 'dumbbell').length;
 assert.ok(freeWeight >= 12, `only ${freeWeight} of ${defaults.length} default exercises are free weights; he asked for a free-weight programme`);
