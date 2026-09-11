@@ -216,7 +216,8 @@
     .range .fill{height:100%;border-radius:5px;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .4s ease}
     .range .fill.earned{background:var(--gold2)}
     .bar-labs{display:flex;justify-content:space-between;color:var(--faint);font-size:10.5px;margin-top:5px}
-    .step-grid{margin-top:12px}
+    .step-grid{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    @media (max-width:359px){.step-grid{grid-template-columns:1fr}}
     .step-label{color:var(--faint);font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:800}
     .step-controls{display:flex;align-items:center;gap:8px;margin-top:6px}
     .step-btn{width:46px;height:46px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel2);font-size:20px;font-weight:700;color:var(--ink2);flex:0 0 auto;transition:border-color .15s var(--e),background .15s var(--e)}
@@ -310,9 +311,7 @@
     .setcount{display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid var(--goldDim);border-radius:var(--r-md);background:rgba(var(--goldDim-rgb),.2);padding:7px 13px;flex:0 0 auto}
     .setcount b{font-family:var(--mono);font-size:16px;color:var(--gold2);font-variant-numeric:tabular-nums}
     .setcount span{font-size:8.5px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:800}
-    .barline{display:flex;align-items:center;gap:7px;margin-top:7px;font-size:11px;color:var(--muted)}
-    .bar-in{width:56px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--ink);text-align:center;font-family:var(--mono);font-size:12.5px}
-    .barsum b{color:var(--ink);font-family:var(--mono)}
+    .convert{margin-top:7px}
     .primary.block{width:100%}
     .lasttime{margin-top:10px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;padding:9px 12px;border:1px solid var(--goldDim);border-radius:var(--r-md);background:var(--goldGhost)}
     .lasttime-lab{font-size:9.5px;letter-spacing:1.2px;text-transform:uppercase;font-weight:800;color:var(--gold2)}

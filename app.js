@@ -1241,23 +1241,30 @@ function draftFor(exId){if(!state.session)return null;const ex=exById(exId);cons
 function step(exId,kind,index,dir){
   const d=draftFor(exId); if(!d)return; const ex=exById(exId);
   if(kind==='weight')d.weight=clamp(Number((Number(d.weight)+dir*Number(ex.inc||2.5)).toFixed(1)),0,500);
-  if(kind==='perSide')d.weight=clamp(fromPerSide(perSide(d.weight)+dir*(Number(ex.inc||2.5)/2)),0,500);
+  if(kind==='equiv')d.weight=clamp(fromEquiv(ex,equivWeight(ex,d.weight)+dir*2.5),0,500);
   if(kind==='reps'){d.reps[index]=clamp(Number(d.reps[index]||0)+dir,0,100);state.session.setDone[exId][index]=false}
   if(kind==='warmWeight'&&d.warmups[index])d.warmups[index].weight=clamp(Number((Number(d.warmups[index].weight)+dir*Number(ex.inc||2.5)).toFixed(1)),0,500);
   if(kind==='warmReps'&&d.warmups[index]){d.warmups[index].reps=clamp(Number(d.warmups[index].reps||0)+dir,0,100);d.warmups[index].done=false}
   save();render();
 }
-/* Loading a barbell is counted in plates per side, not in total kilos, so the
-   app now accepts either and keeps them in step. Typing 15 a side on a 20kg bar
-   sets the work weight to 50; typing 50 sets the side to 15. */
-function barKg(){ return clamp(Number(state.settings.barWeight)||20,0,40); }
-function perSide(total){ return Math.max(0, Math.round(((Number(total)||0)-barKg())/2*100)/100); }
-function fromPerSide(side){ return Number((barKg()+2*Math.max(0,Number(side)||0)).toFixed(2)); }
+/* Two boxes for one number. A dumbbell figure is per hand, a barbell figure is
+   the total, and two dumbbells equal one barbell — so a 15kg dumbbell in each
+   hand is the same total load as a 30kg bar. Whichever box he types in, the
+   other follows. Dumbbell exercises store the per-hand figure because that is
+   what he picks up; everything else stores the total. */
+function equivWeight(ex,w){
+  const v=Number(w)||0;
+  return Number((ex.equipment==='dumbbell'?v*2:v/2).toFixed(2));
+}
+function fromEquiv(ex,v){
+  const n=Math.max(0,Number(v)||0);
+  return Number((ex.equipment==='dumbbell'?n/2:n*2).toFixed(2));
+}
 function setDirect(exId,kind,index,value){ // direct numeric typing, no re-render (keeps focus)
   const d=draftFor(exId); if(!d)return;
   const v=Number(value);
   if(kind==='weight'&&isFinite(v))d.weight=clamp(v,0,500);
-  if(kind==='perSide'&&isFinite(v))d.weight=clamp(fromPerSide(v),0,500);
+  if(kind==='equiv'&&isFinite(v))d.weight=clamp(fromEquiv(exById(exId),v),0,500);
   if(kind==='reps'&&isFinite(v)){d.reps[index]=clamp(Math.round(v),0,100);state.session.setDone[exId][index]=false}
   save();
 }
@@ -2070,9 +2077,12 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   ${keyCue?`<div class="keycue">${esc(keyCue)}</div>`:''}
   ${hasHistory?`<div class="lasttime"><span class="lasttime-lab">Beat this</span><span class="lasttime-val">${esc(fmtEntry(last))}</span><span class="lasttime-when">${esc(lastWhen)}</span></div>`:''}
   ${nudge?`<div class="nudge ${nudge.tone}"><strong>${esc(nudge.title)}</strong><div>${esc(nudge.text)}</div></div>`:''}</div></div>
-  <div class="step-grid"><div><div class="step-label">Work weight</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="0.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div>${plates?`<div class="plates small faint">Per side: ${plates.perSide.join(' + ')||'bar only'}${plates.rem?` (+${plates.rem} short)`:''} · bar ${plates.bar}KG</div>`:''}</div>
-  ${ex.equipment==='barbell'?`<div><div class="step-label">Plates each side</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="-1" aria-label="Less each side">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="1.25" min="0" max="250" value="${perSide(d.weight)}" data-num="perSide" data-ex="${ex.id}" aria-label="Plates each side in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="perSide" data-dir="1" aria-label="More each side">+</button></div>
-  <div class="barline"><span>Bar</span><input class="bar-in num-in" inputmode="decimal" type="number" step="2.5" min="0" max="40" value="${barKg()}" data-setting="barWeight" aria-label="Bar weight in KG"><span class="barsum">+ ${perSide(d.weight)} + ${perSide(d.weight)} = <b>${fmtKg(d.weight)}</b> total</span></div></div>`:''}</div>
+  <div class="step-grid">
+    <div><div class="step-label">${ex.equipment==='dumbbell'?'Each dumbbell':'Work weight'}</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="2.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div></div>
+    <div><div class="step-label">${ex.equipment==='dumbbell'?'Barbell equivalent':'Per dumbbell'}</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="equiv" data-dir="-1" aria-label="Decrease">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="2.5" min="0" max="500" value="${equivWeight(ex,d.weight)}" data-num="equiv" data-ex="${ex.id}" aria-label="Equivalent weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="equiv" data-dir="1" aria-label="Increase">+</button></div></div>
+  </div>
+  <div class="convert small faint">${ex.equipment==='dumbbell'?`${fmtKg(d.weight)} in each hand is the same total as a ${fmtKg(equivWeight(ex,d.weight))} barbell.`:`${fmtKg(d.weight)} on the bar is the same total as ${fmtKg(equivWeight(ex,d.weight))} in each hand.`}</div>
+
   ${warmups.length?renderWarmups(ex,warmups):''}
   <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,hasHistory?(last.reps?.[i]??last.reps?.[0]??ex.min):null,Boolean(done[i]))).join('')}</div>
@@ -2421,7 +2431,19 @@ app.addEventListener('click',e=>{
 app.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.action==='note'&&state.session){state.session.note=t.value;programSaveSoon()}
-  else if(t.dataset.num==='weight'||t.dataset.num==='perSide'){setDirect(t.dataset.ex,t.dataset.num,0,t.value);render()}   // the paired box has to follow
+  /* Re-rendering here replaced the field mid-keystroke, so typing a weight broke
+     the screen. Update the paired box in place instead and leave the DOM alone. */
+  else if(t.dataset.num==='weight'||t.dataset.num==='equiv'){
+    if(t.value===''||t.value==='-') return;            // mid-edit, nothing to convert yet
+    setDirect(t.dataset.ex,t.dataset.num,0,t.value);
+    const ex=exById(t.dataset.ex), w=state.session?.draft?.[t.dataset.ex]?.weight;
+    const other=document.querySelector(`[data-num="${t.dataset.num==='weight'?'equiv':'weight'}"][data-ex="${CSS.escape(t.dataset.ex)}"]`);
+    if(other) other.value=t.dataset.num==='weight'?equivWeight(ex,w):w;
+    const note=t.closest('article')?.querySelector('.convert');
+    if(note) note.textContent=ex.equipment==='dumbbell'
+      ? `${fmtKg(w)} in each hand is the same total as a ${fmtKg(equivWeight(ex,w))} barbell.`
+      : `${fmtKg(w)} on the bar is the same total as ${fmtKg(equivWeight(ex,w))} in each hand.`;
+  }
   else if(t.dataset.num){setDirect(t.dataset.ex,t.dataset.num,Number(t.dataset.index||0),t.value)}   // no re-render: keeps focus
   else if(t.dataset.programField){updateProgramField(t.dataset.ex,t.dataset.programField,t.value)}    // no re-render: keeps focus
   else if(t.dataset.syncField){state.settings[t.dataset.syncField]=t.value.trim();programSaveSoon()}
