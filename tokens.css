@@ -91,10 +91,16 @@
   --series2:#C9C3B4;                /* comparison series (best, fitted trend) */
   --seriesGhost:rgba(217,169,78,.10);
 
-  /* ---- media: exercise demos arrive as white-background GIFs ---- */
-  --media-bg:#0F1218;               /* demos are inverted and screen-blended
-                                       onto this, so the white plate they ship
-                                       with never appears */
+  /* ---- media: the demos are anatomical renders printed on a white plate,
+         with the working muscle picked out in red. Inverting them to sit on a
+         dark UI turned the figure into a photo negative and destroyed that red
+         — the one mark on the image that says which muscle the lift is for. So
+         the demo is given a lit plate of its own and multiplied onto it, and
+         the figure reads exactly as it was drawn. This is the only light
+         surface in the app, and it is deliberate: an anatomy plate on a dark
+         bench. ---- */
+  --plate:#F4EFE5;                  /* the lit top edge of the plate */
+  --plate2:#DCD3C2;                 /* its shaded bottom edge */
 
   /* ---- type ---- */
   --disp:"Fraunces",Georgia,serif;

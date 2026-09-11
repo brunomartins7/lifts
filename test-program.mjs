@@ -138,4 +138,16 @@ const mid = targetFromLast(ex, { weight: 40, reps: [10, 9, 9] });
 assert.equal(mid.weight, 40, 'mid-range progression holds the load');
 assert.deepEqual(mid.reps, [11, 9, 9], 'mid-range progression adds one rep');
 
+/* ---- the two clips the library got wrong for the movement we actually do ----
+   The id names a two-arm wrist curl and a rear-view pulldown that starts
+   halfway down. Both are corrected by CLIP_FIX to a better clip in the same
+   library; if that mapping is ever dropped, the app silently goes back to
+   teaching the wrong lift, so pin it here. */
+assert.equal(byId['dumbbell-over-bench-wrist-curl'].clip,
+  'forearms/dumbbell-over-bench-one-arm-wrist-curl.gif',
+  'the wrist curl must use the one-arm clip — the two-arm one hides where the support hand goes');
+assert.equal(byId['cable-straight-arm-pulldown'].clip,
+  'lats/cable-straight-arm-pulldown-with-rope.gif',
+  'the straight-arm pulldown must use the side-on rope clip that shows the full range');
+
 console.log(`ok — 3 days x 6 upper-body exercises, ${Object.values(AGREED).reduce((a, b) => a + b, 0)} weekly sets pinned, progression rules hold`);

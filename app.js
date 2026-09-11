@@ -112,6 +112,26 @@ const BANK_FIX = {"dumbbell-fly": {"min": 8, "max": 12, "startWeight": 7.5, "goa
    reading that at the rack mid-session helps nobody. */
 const PLAIN_NAMES = {"dumbbell-one-arm-bent-over-row": "One-Arm Dumbbell Row", "dumbbell-incline-row": "Chest-Supported Row", "cable-seated-wide-grip-row": "Wide-Grip Cable Row", "cable-rope-seated-row": "Rope Cable Row", "cable-triceps-pushdown-v-bar": "Triceps Pushdown", "cable-pushdown-with-rope-attachment": "Rope Pushdown", "cable-one-arm-tricep-pushdown": "One-Arm Pushdown", "cable-overhead-triceps-extension-rope-attachment": "Overhead Cable Extension", "dumbbell-standing-triceps-extension": "Overhead Dumbbell Extension", "dumbbell-seated-triceps-extension": "Seated Overhead Extension", "dumbbell-lying-triceps-extension": "Lying Dumbbell Extension", "barbell-lying-triceps-extension-skull-crusher": "Skull Crusher", "ez-bar-standing-french-press": "EZ-Bar French Press", "dumbbell-cross-body-hammer-curl": "Cross-Body Hammer Curl", "dumbbell-standing-biceps-curl": "Dumbbell Curl", "dumbbell-one-arm-standing-hammer-curl": "One-Arm Hammer Curl", "cable-hammer-curl-with-rope": "Rope Hammer Curl", "cable-straight-arm-pulldown": "Straight-Arm Pulldown", "dumbbell-rear-lateral-raise": "Bench-Supported Rear Delt Fly", "cable-cross-over-revers-fly": "Cable Rear Delt Fly", "cable-standing-rear-delt-row-with-rope": "Face Pull", "dumbbell-over-bench-wrist-curl": "Wrist Curl Over Bench", "dumbbell-seated-palms-up-wrist-curl": "Seated Wrist Curl", "dumbbell-standing-reverse-curl": "Dumbbell Reverse Curl", "cable-one-arm-lateral-raise": "One-Arm Cable Lateral Raise", "dumbbell-seated-shoulder-press": "Seated Shoulder Press", "dumbbell-standing-overhead-press": "Standing Dumbbell Press", "barbell-seated-overhead-press": "Seated Barbell Press", "barbell-standing-close-grip-military-press": "Standing Barbell Press", "dumbbell-incline-bench-press": "Incline Dumbbell Press", "barbell-incline-bench-press": "Incline Barbell Press", "dumbbell-bench-press": "Dumbbell Bench Press"};
 for(const b of BANK){ const f=BANK_FIX[b.id]; if(f) Object.assign(b,f); if(PLAIN_NAMES[b.id]) b.name=PLAIN_NAMES[b.id]; }
+/* The library ships several clips for the same movement and the one the id
+   happens to name is not always the one that teaches it. Two were teaching the
+   wrong thing outright: the wrist-curl clip works both arms at once when the
+   lift is one arm on a bench, and the straight-arm pulldown is filmed from
+   behind starting halfway down, so neither the stretch nor the elbow angle is
+   visible. Both corrected here by pointing at a better clip in the same
+   library — the movement, the id and every logged set are unchanged. */
+const CLIP_FIX = {
+  'dumbbell-over-bench-wrist-curl':'forearms/dumbbell-over-bench-one-arm-wrist-curl.gif',
+  'cable-straight-arm-pulldown':'lats/cable-straight-arm-pulldown-with-rope.gif'
+};
+/* The saved program carries its own copy of clip, so fixing the bank alone
+   would leave his installed program on the old one forever. Idempotent. */
+function applyClipFix(st){
+  for(const ex of (st.program||[]).flatMap(d=>d.groups||[]).flatMap(g=>g.exercises||[])) if(CLIP_FIX[ex.id]) ex.clip=CLIP_FIX[ex.id];
+  for(const k of Object.keys(st.exerciseIndex||{})) if(CLIP_FIX[k]) st.exerciseIndex[k].clip=CLIP_FIX[k];
+  for(const ex of Object.values(st.session?.exerciseSwaps||{})) if(ex&&CLIP_FIX[ex.id]) ex.clip=CLIP_FIX[ex.id];
+  for(const ex of (st.session?.extras||[])) if(ex&&CLIP_FIX[ex.id]) ex.clip=CLIP_FIX[ex.id];
+}
+for(const b of BANK){ if(CLIP_FIX[b.id]) b.clip=CLIP_FIX[b.id]; }
 
 const MUSCLES = ['chest','back','shoulders','biceps','triceps','forearms','core','quads','hamstrings','glutes','calves'];
 const LEG_MUSCLES = ['quads','hamstrings','glutes','calves'];
@@ -350,6 +370,7 @@ function migrate(raw){
   delete n.__recoveredFrom; delete n.__quarantined; delete n.__fresh;   // transient flags — set per-load by loadState, never persisted
   disambiguate(n);
   relinkLegacyIds(n);
+  applyClipFix(n);
   n.sessions = n.sessions.filter(s=>s&&s.entries).map(s=>normalizeSession(s,n));
   n.currentDayIndex = Number.isInteger(n.currentDayIndex)?clamp(n.currentDayIndex,0,n.program.length-1):0;
   if (n.session && n.session.dayIndex==null) n.session=null;
@@ -1852,11 +1873,15 @@ function renderRecoveryBanner(){
 function renderRadar(profile,best){const axes=radarAxes(),n=axes.length,cx=170,cy=155,maxR=108,pts=[];for(let i=0;i<n;i++){const a=-Math.PI/2+i*2*Math.PI/n;pts.push({x:cx+Math.cos(a)*maxR,y:cy+Math.sin(a)*maxR,a})}const poly=vals=>vals.map((v,i)=>`${cx+Math.cos(pts[i].a)*maxR*v/100},${cy+Math.sin(pts[i].a)*maxR*v/100}`).join(' ');return`<div class="radar-wrap"><svg class="radar" viewBox="0 0 340 310" aria-label="Score radar">${[25,50,75,100].map(r=>`<polygon points="${pts.map(p=>`${cx+(p.x-cx)*r/100},${cy+(p.y-cy)*r/100}`).join(' ')}" fill="none" stroke="var(--gridline)"/>`).join('')}${pts.map(p=>`<line x1="${cx}" y1="${cy}" x2="${p.x}" y2="${p.y}" stroke="var(--gridline2)"/>`).join('')}<polygon points="${poly(axes.map(a=>best[a.key]||0))}" fill="none" stroke="var(--series2)" stroke-width="1.25" stroke-dasharray="3 4" opacity=".55"/><polygon class="radar-cur" points="${poly(axes.map(a=>profile[a.key]||0))}" fill="rgba(var(--gold-rgb),.22)" stroke="var(--gold2)" stroke-width="2.5"/>${pts.map((p,i)=>{const lx=cx+Math.cos(p.a)*(maxR+34),ly=cy+Math.sin(p.a)*(maxR+24);return`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="11">${axes[i].label}</text><text class="num" x="${lx}" y="${ly+14}" text-anchor="middle">${profile[axes[i].key]}</text>`}).join('')}</svg><div class="legend"><span><i class="dot" style="background:var(--gold2)"></i>Current</span><span><i class="dot" style="background:var(--series2)"></i>Best</span></div></div>`}
 
 /* Signature element: session progress rendered as a barbell loading plates. */
-function renderBarbell(pct){
-  const plates=Math.round(clamp(pct,0,100)/100*10); // 5 per side
-  const side=(n,flip)=>Array.from({length:5},(_,i)=>{const on=(flip?i>=5-n:i<n);return`<span class="plate p${flip?5-i:i+1} ${on?'on':''}"></span>`}).join('');
-  const L=Math.min(5,Math.ceil(plates/2)), R=Math.min(5,Math.floor(plates/2));
-  return `<div class="barload" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100" aria-label="Session completion ${pct}%"><span class="collar"></span>${side(L,true)}<span class="bar"></span>${side(R,false)}<span class="collar"></span></div>`;
+/* The signature: one loading sleeve, one plate per set. It used to be a whole
+   barbell with ten plates standing in for a percentage, so logging a set often
+   moved nothing — twenty-one sets across ten plates means two sets per plate.
+   Now every logged set loads exactly one more plate, which is the only reason
+   to draw a barbell instead of a progress bar. */
+function renderBarbell(done,total){
+  const n=Math.max(1,total|0), filled=clamp(done|0,0,n);
+  const plates=Array.from({length:n},(_,i)=>`<span class="plate ${i<filled?'on':''}"></span>`).join('');
+  return `<div class="barload" role="progressbar" aria-valuenow="${filled}" aria-valuemin="0" aria-valuemax="${n}" aria-label="${filled} of ${n} sets completed"><span class="collar"></span><span class="sleeve">${plates}</span><span class="collar"></span></div>`;
 }
 
 function renderHeatmap(){
@@ -2014,7 +2039,7 @@ function renderWorkout(){
   ${inDeload()?'<div class="banner warn"><strong>Deload week</strong><div>Loads are prefilled 10% lighter at floor reps. Keep every rep crisp and leave fresh — the block restarts next week.</div></div>':''}
   ${(state.session?.removedExercises||[]).length?'<div class="banner warn"><strong>Exercise removed for today</strong><div>Its planned sets remain incomplete and will reduce this session’s completion grade.</div></div>':''}
   ${prevNote?`<div class="card flat note-echo"><span class="eyebrow">Last time you wrote</span><div class="small muted" style="margin-top:5px">${esc(prevNote)}</div></div>`:''}
-  <div class="prog">${renderBarbell(c.pct)}<div class="mono small muted" style="text-align:right">${c.pct}%</div></div>
+  <div class="prog">${renderBarbell(c.done,c.total)}</div>
   <div class="groups-grid">${day.groups.map(g=>renderGroup(g,openDay)).join('')}</div>
   ${(state.session?.extras||[]).length?`<section class="group"><div class="group-head"><div><div class="group-name">Extra work</div><div class="group-rule">Added today. Logged like everything else, but it cannot lower your grade.</div></div></div>${(state.session.extras||[]).map(x=>renderExercise({...x,isExtra:true},openDay,'extra',x.id)).join('')}</section>`:''}
   ${renderExtraCard()}
@@ -2025,21 +2050,10 @@ function renderWorkout(){
 }
 function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div></div>${g.exercises.map(base=>({base,ex:sessionExercise(base)})).filter(x=>!state.session?.removedExercises?.includes(x.ex.id)).map(x=>renderExercise(x.ex,dayIndex,g.id,x.base.id)).join('')}</section>`}
 function renderMedia(ex){
-  const fixed=CORRECTED_DEMOS[ex.id];
-  if(fixed) return`<div class="media corrected"><img src="${esc(fixed)}" alt="${esc(ex.name)} positions" loading="lazy"></div>`;
   return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
 /* The coaching layer. Four blocks in the order you need them at the rack: set
    up, perform, what actually drives growth, and the mistake to avoid. Falls back
    to the exercise's own cue list when no coaching entry exists. */
-/* Where the library's clip teaches the wrong thing — half the range, two arms
-   for a one-arm lift, the decisive position hidden by the camera — it is replaced
-   by a corrected strip built from the same frames and annotated, served from this
-   repo rather than the GIF host. */
-const CORRECTED_DEMOS = {
-  'cable-straight-arm-pulldown':'demos/straight-arm-pulldown.png',
-  'dumbbell-over-bench-wrist-curl':'demos/wrist-curl.png',
-  'cable-overhead-triceps-extension-rope-attachment':'demos/overhead-cable-extension.png'
-};
 function renderTechnique(ex){
   const c=COACHING[ex.id];
   if(!c) return renderMedia(ex)+((ex.cues||[]).length?`<div class="cues"><ul>${(ex.cues||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:'<div class="small faint">No written guide for this movement yet — follow the demo above.</div>');
@@ -2152,7 +2166,7 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
      only occasionally need — adjustments, the demo, the cues — sits behind a
      disclosure so the card ends at the thing you actually came to tap. */
   return `<article class="exercise" id="ex-${esc(ex.id)}">
-  <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}${ex.isExtra?'':`<span class="reorder"><button data-action="move-ex-up" data-ex="${esc(baseId)}" aria-label="Move ${esc(ex.name)} earlier"${pos.index<=0?' disabled':''}>&#9650;</button><button data-action="move-ex-down" data-ex="${esc(baseId)}" aria-label="Move ${esc(ex.name)} later"${pos.index>=pos.total-1?' disabled':''}>&#9660;</button></span>`}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}${target.backedOff?'<span style="color:var(--gold2)">Load reduced — last time fell under '+ex.min+' reps</span> · ':''}${hasHistory?`Last ${esc(fmtEntry(last))}`:'Never logged — suggested start'} · aim ${ex.min}-${ex.max} reps${ex.rir!=null?` · leave ${ex.rir} in reserve`:''}${ex.rest?` · rest ${Math.round(ex.rest/15)*15}s`:''}</div>
+  <div class="ex-head"><div><div class="ex-title-row"><div class="ex-name">${esc(ex.name)}</div>${ex.isExtra?'':`<span class="reorder"><button data-action="move-ex-up" data-ex="${esc(baseId)}" aria-label="Move ${esc(ex.name)} earlier"${pos.index<=0?' disabled':''}>&#9650;</button><button data-action="move-ex-down" data-ex="${esc(baseId)}" aria-label="Move ${esc(ex.name)} later"${pos.index>=pos.total-1?' disabled':''}>&#9660;</button></span>`}</div><div class="ex-meta">${d.estimatedFromMuscle?'Estimated from similar '+esc(MUSCLE_LABEL[ex.muscle].toLowerCase())+' lifts · ':''}${target.backedOff?'<span style="color:var(--gold2)">Load reduced — last time fell under '+ex.min+' reps</span> · ':''}${hasHistory?`Last ${esc(fmtEntry(last))}`:'Never logged — suggested start'} · aim ${ex.min}-${ex.max} reps${ex.rir!=null?` · leave ${ex.rir} in reserve`:''}${ex.rest?` · rest ${Math.round(ex.rest/15)*15}s`:''}</div>
   ${keyCue?`<div class="keycue">${esc(keyCue)}</div>`:''}
   ${hasHistory?`<div class="lasttime"><span class="lasttime-lab">Beat this</span><span class="lasttime-val">${esc(fmtEntry(last))}</span><span class="lasttime-when">${esc(lastWhen)}</span></div>`:''}
   ${nudge?`<div class="nudge ${nudge.tone}"><strong>${esc(nudge.title)}</strong><div>${esc(nudge.text)}</div></div>`:''}</div></div>
@@ -2163,7 +2177,7 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
   ${!barbellRelevant(ex)?'':`<div class="convert small faint">${ex.equipment==='dumbbell'?`${fmtKg(d.weight)} in each hand is the same total as a ${fmtKg(equivWeight(ex,d.weight))} barbell.`:`${fmtKg(d.weight)} on the bar is the same total as ${fmtKg(equivWeight(ex,d.weight))} in each hand.`}</div>`}
 
   ${warmups.length?renderWarmups(ex,warmups):''}
-  <div class="setlog-head"><span>Work set log</span><span>${done.filter(Boolean).length}/${(d.reps||[]).length} done</span></div>
+  <div class="setlog-head"><span>${done.filter(Boolean).length}/${(d.reps||[]).length} logged</span></div>
   <div class="setlog">${(d.reps||[]).map((r,i)=>renderSetRow(ex,i,r,hasHistory?(last.reps?.[i]??last.reps?.[0]??ex.min):null,Boolean(done[i]))).join('')}</div>
   ${(()=>{const f=failureSet(ex,dayIndex);return f?`<div class="failure-note ${f.go?'go':'hold'}">${esc(f.why)}</div>`:''})()}
   ${panel(ex.id+':adjust','Adjust',`<div class="set-actions"><button class="mini-btn" data-action="fill-last" data-ex="${ex.id}">Same as last</button><button class="mini-btn" data-action="fill-target" data-ex="${ex.id}">Fill target</button><button class="mini-btn" data-action="add-set" data-ex="${ex.id}">Add set</button><button class="mini-btn" data-action="remove-set" data-ex="${ex.id}">Remove set</button><button class="mini-btn gold" data-action="add-warmup" data-ex="${ex.id}">Add warmup</button>${warmups.length?`<button class="mini-btn" data-action="remove-warmup" data-ex="${ex.id}">Remove warmup</button>`:''}<button class="mini-btn danger" data-action="session-remove" data-ex="${ex.id}">Remove today</button></div>`)}
@@ -2193,7 +2207,7 @@ function renderSetRow(ex,i,r,prev,done){
   const rpeBtn=adv?`<button class="rpe-btn ${rpe?'on':''}" data-action="rpe" data-ex="${ex.id}" data-index="${i}" title="Tap to cycle effort (RPE)" aria-label="Set ${i+1} RPE">${rpe?('@'+rpe):'RPE'}</button>`:'';
   const last=(state.session?.draft?.[ex.id]?.reps||[]).length-1===i;
   const fail=last?failureSet(ex,state.session?.dayIndex):null;
-  return`<div class="setrow ${done?'done':''} ${adv?'adv':''} ${fail&&fail.go?'to-failure':''}"><div class="setn">SET ${i+1}${fail?`<span class="setn-tag ${fail.go?'go':'hold'}">${fail.go?'FAILURE':'LEAVE 1-2'}</span>`:''}</div><div class="prev">${prev==null?'&mdash;':'PREV<br>'+prev}</div><div class="rep-step"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="-1" aria-label="Decrease reps">−</button><input class="rep-val num-in" inputmode="numeric" type="number" step="1" min="0" max="100" value="${r}" data-num="reps" data-index="${i}" data-ex="${ex.id}" aria-label="Set ${i+1} reps"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="1" aria-label="Increase reps">+</button></div>${rpeBtn}<button class="set-log ${done?'is-done':''}" data-action="logset" data-ex="${ex.id}" data-index="${i}">${done?'✓ Done':'Log'}</button></div>`}
+  return`<div class="setrow ${done?'done':''} ${adv?'adv':''} ${fail&&fail.go?'to-failure':''}"><div class="setn"><b>${i+1}</b><span class="setn-prev">${prev==null?'&mdash;':'was '+prev}</span>${fail?`<span class="setn-tag ${fail.go?'go':'hold'}">${fail.go?'FAILURE':'LEAVE 1-2'}</span>`:''}</div><div class="rep-step"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="-1" aria-label="Decrease reps">−</button><input class="rep-val num-in" inputmode="numeric" type="number" step="1" min="0" max="100" value="${r}" data-num="reps" data-index="${i}" data-ex="${ex.id}" aria-label="Set ${i+1} reps"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="reps" data-index="${i}" data-dir="1" aria-label="Increase reps">+</button></div>${rpeBtn}<button class="set-log ${done?'is-done':''}" data-action="logset" data-ex="${ex.id}" data-index="${i}">${done?'✓ Done':'Log'}</button></div>`}
 
 function renderMaxChart(){const rows=uniqueExercises().map(ex=>{const curr=entryEst(ex,latestEntryFor(ex)),avg=entryEst(ex,averageEntry(ex)),goal=goalEst(ex),scale=Math.max(goal,avg,curr,1)*1.1;return`<div class="stat-row" data-action="exercise" data-ex="${ex.id}"><div class="stat-top"><div><div class="stat-name">${esc(ex.name)}</div><div class="small faint">Current ${Math.round(curr)} · Reference ${Math.round(avg)} · Goal ${Math.round(goal)}</div></div><div class="stat-num" style="color:${scoreColor(scoreFromEntry(ex,latestEntryFor(ex)))}">${scoreFromEntry(ex,latestEntryFor(ex))}</div></div><div class="stat-bar"><span class="stat-average" style="width:${clamp(avg/scale*100,0,100)}%"></span><span class="stat-current" style="width:${clamp(curr/scale*100,0,100)}%"></span><span class="stat-goal" style="left:${clamp(goal/scale*100,0,100)}%"></span></div></div>`}).join('');return`<div class="card"><div class="legend"><span><i class="dot" style="background:var(--series)"></i>Current est max</span><span><i class="dot" style="background:rgba(var(--ink-rgb),.14)"></i>Reference</span><span><i class="dot" style="background:var(--ink2)"></i>Goal</span></div>${rows}</div>`}
 

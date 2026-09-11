@@ -26,11 +26,9 @@
     *{box-sizing:border-box}
     html{scrollbar-color:var(--panel3) var(--bg);scroll-behavior:auto}
     html,body{margin:0;min-height:100%;max-width:100%;overflow-x:hidden;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-    body{background:
-      radial-gradient(ellipse 56% 30% at 18% -6%,rgba(var(--gold-rgb),.11),transparent),
-      radial-gradient(ellipse 40% 24% at 100% 2%,rgba(var(--ink-rgb),.03),transparent),
-      linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bot) 100%);
-      background-attachment:fixed}
+    /* The gold wash and the hero's corner glow encoded nothing. Light in this
+       app now belongs to the surface being worked on. */
+    body{background:linear-gradient(180deg,var(--bg-top) 0%,var(--bg-bot) 100%);background-attachment:fixed}
     ::selection{background:rgba(var(--gold-rgb),.32)}
     ::-webkit-scrollbar{width:10px;height:10px}
     ::-webkit-scrollbar-thumb{background:var(--panel3);border-radius:6px;border:2px solid var(--bg)}
@@ -57,7 +55,7 @@
     .ovr-mini{display:flex;align-items:baseline;gap:6px;border:1px solid var(--line);border-radius:999px;padding:7px 13px;background:rgba(var(--panel-rgb),.85)}
     .ovr-mini span{font-size:9.5px;letter-spacing:1.4px;color:var(--faint);font-weight:800}
     .ovr-mini b{font-family:var(--mono);font-size:17px}
-    .sync-chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:800;letter-spacing:.4px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:var(--panel);transition:border-color .15s var(--e)}
+    .sync-chip{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-size:10.5px;font-weight:800;letter-spacing:.4px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 9px;background:var(--panel);transition:border-color .15s var(--e)}
     .sync-chip:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--faint)}
     .sync-chip.ok{color:var(--ok);border-color:rgba(var(--ok-rgb),.35)}.sync-chip.ok:before{background:var(--ok)}
     .sync-chip.busy{color:var(--gold2);border-color:var(--goldDim)}.sync-chip.busy:before{background:var(--gold2);animation:pulse 1s infinite}
@@ -82,7 +80,6 @@
 
     /* ============ Hero / typography ============ */
     .hero{margin-top:13px;border:1px solid var(--line);border-radius:var(--r-lg);padding:22px 20px;background:linear-gradient(158deg,rgba(var(--panel3-rgb),.5),rgba(var(--panel-rgb),.97));box-shadow:0 26px 60px rgba(0,0,0,.30),inset 0 1px 0 rgba(var(--ink-rgb),.04);position:relative;overflow:hidden}
-    .hero:before{content:"";position:absolute;right:-70px;top:-80px;width:200px;height:200px;border-radius:50%;background:radial-gradient(circle,rgba(var(--gold-rgb),.14),transparent 70%);pointer-events:none}
     .eyebrow{font-size:10.5px;letter-spacing:2px;text-transform:uppercase;color:var(--gold2);font-weight:800}
     .title{margin-top:7px;font-family:var(--disp);font-weight:600;font-size:31px;line-height:1.05;letter-spacing:.1px;position:relative}
     .title em{font-style:italic;color:var(--gold2)}
@@ -102,7 +99,7 @@
     .secondary.danger{border-color:rgba(var(--risk-rgb),.4);color:var(--risk);background:var(--riskDim)}
     .secondary.block{display:block;width:100%;margin-top:9px}
     .danger-solid{background:var(--risk);color:var(--risk-ink);border-radius:var(--r-sm);padding:11px 16px;font-weight:800;min-height:42px}
-    .back{color:var(--muted);padding:8px 0 2px;font-size:13.5px;font-weight:600;transition:color .15s var(--e)}
+    .back{color:var(--muted);padding:12px 10px 10px 0;margin-left:-2px;min-height:44px;font-size:13.5px;font-weight:600;transition:color .15s var(--e)}
     .card{border:1px solid var(--line);border-radius:var(--r-lg);background:rgba(var(--panel-rgb),.92);padding:16px;margin-top:12px;box-shadow:0 14px 34px rgba(0,0,0,.16),inset 0 1px 0 rgba(var(--ink-rgb),.03)}
     .card.flat{box-shadow:none;padding:8px 16px}
     .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
@@ -184,32 +181,44 @@
 
     /* ============ Workout ============ */
     .switcher{display:flex;gap:7px;margin-top:12px}
-    .switch{flex:1;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel);padding:11px;font-family:var(--mono);font-weight:700;color:var(--muted);min-height:42px;transition:border-color .15s var(--e),background .15s var(--e)}
+    .switch{flex:1;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel);padding:11px;font-family:var(--mono);font-weight:700;color:var(--muted);min-height:44px;transition:border-color .15s var(--e),background .15s var(--e)}
     .switch.active{background:var(--gold);border-color:var(--gold);color:var(--gold-ink)}
     .prog{margin-top:14px}
-    /* Signature: the loading barbell. Plates appear as the session fills. */
-    .barload{display:flex;align-items:center;justify-content:center;gap:3px;padding:10px 0 4px}
-    .barload .bar{flex:1;max-width:150px;height:5px;border-radius:3px;background:linear-gradient(180deg,var(--steel),var(--steel2));box-shadow:0 1px 0 rgba(0,0,0,.5)}
-    .barload .collar{width:7px;height:15px;border-radius:2.5px;background:linear-gradient(180deg,var(--steel),var(--steel2))}
-    .barload .plate{width:9px;border-radius:3px;background:var(--panel3);border:1px solid var(--line);transition:background .35s,border-color .35s,box-shadow .35s}
-    .barload .p1{height:44px}.barload .p2{height:38px}.barload .p3{height:32px}.barload .p4{height:26px}.barload .p5{height:20px}
-    .barload .plate.on{background:linear-gradient(180deg,var(--gold2),var(--gold));border-color:var(--gold);box-shadow:0 0 12px rgba(var(--gold-rgb),.35)}
+    /* Signature: one loading sleeve, one plate per set of the session. The
+       shaft runs behind the plates, so an empty sleeve still reads as a bar
+       waiting to be loaded rather than an empty progress track. */
+    .barload{display:flex;align-items:center;justify-content:center;gap:4px;padding:12px 0 6px}
+    .barload .collar{width:7px;height:20px;border-radius:2.5px;background:linear-gradient(180deg,var(--steel),var(--steel2));flex:0 0 auto}
+    .barload .sleeve{flex:1;max-width:320px;display:flex;gap:2px;align-items:center;position:relative;padding:0 3px}
+    .barload .sleeve:before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;transform:translateY(-50%);border-radius:2px;background:linear-gradient(180deg,var(--steel),var(--steel2))}
+    .barload .plate{position:relative;flex:1;min-width:3px;height:30px;border-radius:2px;background:var(--panel3);border:1px solid var(--line);transition:background .3s var(--e),border-color .3s var(--e)}
+    .barload .plate.on{background:linear-gradient(180deg,var(--gold2),var(--gold));border-color:var(--gold)}
     .note-echo{margin-top:12px;border-left:3px solid var(--goldDim)}
-    .group{border:1px solid var(--line);border-radius:var(--r-lg);background:rgba(var(--bg2-rgb),.7);padding:13px;margin-top:15px}
-    .group-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:2px 3px 8px}
+    /* The group was a box holding boxes holding boxes. It is a heading now:
+       the exercise card is the only frame on the screen, so the eye lands on
+       the lift instead of counting borders. */
+    .group{margin-top:26px}
+    .group-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:0 2px 9px;border-bottom:1px solid var(--line)}
     .group-name{font-family:var(--disp);font-style:italic;font-weight:600;font-size:15.5px}
     .group-rule{color:var(--faint);font-size:11.5px;margin-top:2px}
     .round-btn{border:1px solid var(--goldDim);background:var(--goldGhost);color:var(--gold2);border-radius:999px;padding:9px 14px;font-weight:800;font-size:12px;white-space:nowrap;min-height:38px;transition:background .15s var(--e)}
-    .exercise{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:14px;margin-top:10px}
+    /* Lit from the top, sitting on its own shadow — the one raised surface. */
+    .exercise{border:1px solid var(--line);border-radius:var(--r-lg);background:linear-gradient(180deg,var(--panel2),var(--panel) 62%);padding:15px 14px 14px;margin-top:13px;box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.055),0 18px 34px -22px #000}
     .ex-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-    .ex-name{font-weight:800;font-size:17px;line-height:1.25;letter-spacing:-.1px}
+    /* The name takes the room it needs and the arrows sit beside it, rather
+       than inside it where a 44px target forced the name to wrap. */
+    .ex-title-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px}
+    .ex-name{font-family:var(--disp);font-weight:600;font-size:21px;line-height:1.15;letter-spacing:0}
     .title--compact{font-size:22px}
     .ex-meta{color:var(--muted);font-size:12px;margin-top:4px}
     .tag{border:1px solid var(--line);border-radius:999px;background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:11px;font-weight:700;padding:7px 11px;white-space:nowrap;transition:border-color .15s var(--e)}
-    .media{margin-top:11px;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--line);background:var(--media-bg);position:relative;min-height:44px}
-    .media img{display:block;width:100%;max-height:210px;object-fit:contain;background:transparent;filter:invert(1) hue-rotate(180deg) contrast(1.04);mix-blend-mode:screen}
+    /* The demo is the one light surface in the app — see the plate note in
+       tokens.css. isolation:isolate keeps the multiply inside this box, so the
+       render blends with the plate and never with the page behind it. */
+    .media{margin-top:13px;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--goldDim);background:linear-gradient(175deg,var(--plate),var(--plate2));position:relative;min-height:44px;isolation:isolate;box-shadow:0 16px 34px -18px rgba(0,0,0,.95)}
+    .media img{display:block;width:100%;max-height:272px;object-fit:contain;background:transparent;mix-blend-mode:multiply}
     .media-fallback{display:none;padding:12px;color:var(--faint);font-size:12px}
-    .media.failed{background:var(--panel2)}
+    .media.failed{background:var(--panel2);border-color:var(--line);box-shadow:none}
     .media.failed .media-fallback{display:block;color:var(--faint)}
     .range{margin-top:11px}
     .range .bar{height:7px;border-radius:5px;background:rgba(var(--ink-rgb),.07);overflow:hidden}
@@ -218,11 +227,14 @@
     .bar-labs{display:flex;justify-content:space-between;color:var(--faint);font-size:10.5px;margin-top:5px}
     .step-grid{margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .step-grid.one{grid-template-columns:1fr}
-    @media (max-width:359px){.step-grid{grid-template-columns:1fr}}
-    .step-label{color:var(--faint);font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:800}
+    @media (max-width:430px){.step-grid{grid-template-columns:1fr}}
+    .step-label{color:var(--faint);font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;font-weight:700}
     .step-controls{display:flex;align-items:center;gap:8px;margin-top:6px}
     .step-btn{width:46px;height:46px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--panel2);font-size:20px;font-weight:700;color:var(--ink2);flex:0 0 auto;transition:border-color .15s var(--e),background .15s var(--e)}
-    .step-val,.num-in{flex:1;text-align:center;font-family:var(--mono);font-weight:700;font-size:18px;border:1px solid var(--line);background:var(--panel2);border-radius:var(--r-sm);padding:10px 6px;min-width:0;-moz-appearance:textfield}
+    /* The load and the reps are the whole content of this screen. They are
+       set in mono at display size, tabular so the digits do not shuffle as he
+       taps the steppers. */
+    .step-val,.num-in{flex:1;text-align:center;font-family:var(--mono);font-weight:700;font-size:27px;letter-spacing:-.7px;font-variant-numeric:tabular-nums;color:var(--ink);border:1px solid var(--line);background:var(--panel3);border-radius:var(--r-sm);padding:7px 4px;min-width:0;-moz-appearance:textfield}
     .num-in::-webkit-outer-spin-button,.num-in::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
     .plates{margin-top:7px}
     .set-actions{display:flex;flex-wrap:wrap;gap:7px;margin-top:11px}
@@ -237,16 +249,25 @@
     .warm-val{flex:1;text-align:center;font-size:13px}
     .warm-log{height:40px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);font-weight:800;font-size:11.5px;color:var(--ink2)}
     .warm-log.is-done{background:var(--okDim);border-color:rgba(var(--ok-rgb),.45);color:var(--ok)}
-    .setlog-head{display:flex;justify-content:space-between;color:var(--faint);font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:800;margin-top:13px}
-    .setlog{margin-top:7px;display:grid;gap:7px}
-    .setrow{display:grid;grid-template-columns:52px 46px 1fr 86px;gap:8px;align-items:center;border:1px solid var(--line);border-radius:var(--r-sm);background:rgba(var(--bg2-rgb),.55);padding:8px;transition:border-color .2s var(--e),background .2s var(--e)}
-    .setrow.adv{grid-template-columns:46px 42px 1fr 48px 78px}
-    .setrow.done{border-color:rgba(var(--ok-rgb),.4);background:rgba(var(--ok-rgb),.06)}
-    .setn{font-family:var(--mono);font-size:10.5px;color:var(--faint);font-weight:700;white-space:nowrap;min-width:0;font-variant-numeric:tabular-nums}
-    .prev{font-family:var(--mono);font-size:10px;color:var(--faint);line-height:1.35;text-align:center}
-    .rep-step{display:flex;align-items:center;gap:6px}
+    /* A ledger, not a stack of cards. Rows are separated by a hairline and
+       carry a rail on the left edge that colours by state, so a finished set
+       is legible from arm's length without a second border around it. The
+       previous number moved up beside the set number: it belongs with the set
+       it refers to, and dropping that column gave the rep number room to
+       become the biggest thing in the row. */
+    .setlog-head{display:flex;justify-content:flex-end;color:var(--faint);font-size:10px;letter-spacing:1.1px;text-transform:uppercase;font-weight:800;margin-top:15px;padding-bottom:5px;border-bottom:1px solid var(--line)}
+    .setlog{display:grid}
+    .setrow{display:grid;grid-template-columns:58px 1fr 86px;gap:9px;align-items:center;border:0;border-radius:0;background:none;padding:8px 2px 8px 11px;box-shadow:inset 2px 0 0 var(--line);transition:box-shadow .2s var(--e),background .2s var(--e)}
+    .setrow+.setrow{border-top:1px solid var(--soft)}
+    .setrow.adv{grid-template-columns:58px 1fr 48px 78px}
+    .setrow.done{box-shadow:inset 2px 0 0 var(--ok);background:rgba(var(--ok-rgb),.05)}
+    .setn{font-family:var(--mono);white-space:nowrap;min-width:0;font-variant-numeric:tabular-nums;line-height:1.2}
+    .setn b{font-size:15px;font-weight:700;color:var(--ink2)}
+    .setrow.done .setn b{color:var(--ok)}
+    .setn-prev{display:block;font-size:10px;color:var(--faint);font-weight:500;margin-top:1px}
+    .rep-step{display:flex;align-items:center;gap:7px}
     .rep-step .step-btn{width:44px;height:44px;font-size:17px}
-    .rep-val{font-size:18px;font-weight:700;padding:8px 4px}
+    .rep-val{font-size:23px;font-weight:700;padding:6px 2px;letter-spacing:-.6px}
     .rpe-btn{height:42px;border:1px dashed var(--line);border-radius:var(--r-sm);background:transparent;color:var(--faint);font-family:var(--mono);font-weight:700;font-size:11px;transition:border-color .15s var(--e),color .15s var(--e)}
     .rpe-btn.on{border-style:solid;border-color:var(--goldDim);color:var(--gold2);background:var(--goldGhost)}
     .set-log{min-height:44px;height:44px;border:1px solid var(--goldDim);border-radius:var(--r-sm);background:var(--goldGhost);color:var(--gold2);font-weight:800;font-size:12.5px;transition:background .15s var(--e)}
@@ -267,27 +288,29 @@
     .cues{margin-top:12px;color:var(--muted);font-size:12px;line-height:1.55}
     .cues ul{margin:6px 0 0;padding-left:17px}
     /* ---- coaching layer: how to do the movement, and what makes it grow ---- */
-    .coach{margin-top:13px;display:grid;gap:1px;background:var(--soft);border:1px solid var(--line);border-radius:var(--r-md);overflow:hidden}
-    .coach-block{background:var(--panel);padding:11px 12px 12px}
-    .coach-h{font-size:10px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800;color:var(--faint);margin-bottom:6px}
-    .coach-block ul{margin:0;padding-left:16px;color:var(--ink2);font-size:12.5px;line-height:1.62}
-    .coach-block li+li{margin-top:5px}
-    .coach-block li::marker{color:var(--faint)}
-    .coach-block.grow{background:var(--goldGhost);box-shadow:inset 2px 0 0 var(--gold)}
+    /* Instructions, not four more cards. The heading sits in its own narrow
+       column so the sentences start on one left edge and read as a single
+       column of text — which is what they are. The two that carry a warning
+       keep their colour on the heading; the tinted slab behind them was doing
+       the same job twice and made the panel look like a stack of alerts. */
+    .coach{margin-top:14px;display:grid;gap:0}
+    .coach-block{padding:12px 0;display:grid;grid-template-columns:78px minmax(0,1fr);gap:13px;align-items:start}
+    .coach-block+.coach-block{border-top:1px solid var(--soft)}
+    .coach-h{font-size:11.5px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--faint);line-height:1.35;padding-top:1px}
+    .coach-block ul{margin:0;padding-left:0;list-style:none;color:var(--ink2);font-size:14px;line-height:1.52}
+    .coach-block li+li{margin-top:7px}
     .coach-block.grow .coach-h{color:var(--gold2)}
     .coach-block.grow ul{color:var(--ink)}
-    .coach-block.grow li::marker{color:var(--gold)}
-    .coach-block.warn{box-shadow:inset 2px 0 0 var(--risk)}
     .coach-block.warn .coach-h{color:var(--risk)}
-    .coach-block.warn li::marker{color:var(--risk)}
+    @media (max-width:359px){.coach-block{grid-template-columns:1fr;gap:5px}}
     /* ---- same-stimulus alternatives ---- */
     .alt-list{display:grid;gap:8px}
     .alt-card{display:grid;grid-template-columns:64px 1fr;gap:11px;align-items:center;text-align:left;width:100%;padding:8px;border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);transition:border-color .15s var(--e),background .15s var(--e)}
     .alt-card[disabled]{opacity:.42}
     @media (hover:hover){.alt-card:not([disabled]):hover{border-color:var(--goldDim);background:var(--panel2)}}
     .alt-card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-    .alt-media{display:block;height:52px;border-radius:8px;overflow:hidden;background:var(--media-bg);border:1px solid var(--line)}
-    .alt-media img{display:block;width:100%;height:100%;object-fit:contain;filter:invert(1) hue-rotate(180deg) contrast(1.04);mix-blend-mode:screen}
+    .alt-media{display:block;height:52px;border-radius:8px;overflow:hidden;background:linear-gradient(175deg,var(--plate),var(--plate2));border:1px solid var(--goldDim);isolation:isolate}
+    .alt-media img{display:block;width:100%;height:100%;object-fit:contain;mix-blend-mode:multiply}
     .alt-copy{display:grid;gap:3px;min-width:0}
     .alt-name{font-weight:800;font-size:12.5px;line-height:1.3;color:var(--ink)}
     .alt-meta{font-size:11px;color:var(--muted);text-transform:capitalize}
@@ -308,10 +331,16 @@
     .extra-card{border-color:var(--goldDim)}
     /* ---- progressive-overload nudges ---- */
     /* ---- the number to beat ---- */
-    .reorder{display:inline-flex;gap:3px;margin-left:8px;vertical-align:2px}
-    .reorder button{width:26px;height:26px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--muted);font-size:9px;line-height:1;padding:0}
-    .reorder button[disabled]{opacity:.3}
-    @media (hover:hover){.reorder button:not([disabled]):hover{border-color:var(--goldDim);color:var(--gold2)}}
+    /* 26px was below the floor this app promises everywhere else. The visible
+       chip stays small so it does not shout beside the name; the button around
+       it is a full 44px target. */
+    /* 26px was below the floor this app promises everywhere else. The target is
+       a full 44px now; it stays borderless so two arrows do not shout beside
+       the exercise name. */
+    .reorder{display:inline-flex;gap:1px;margin-left:4px;vertical-align:-14px}
+    .reorder button{width:44px;height:44px;border:1px solid transparent;border-radius:10px;background:none;color:var(--muted);font-size:10px;line-height:1;padding:0}
+    .reorder button[disabled]{opacity:.25}
+    @media (hover:hover){.reorder button:not([disabled]):hover{border-color:var(--goldDim);color:var(--gold2);background:var(--panel2)}}
     .keycue{margin-top:9px;padding:8px 11px;border-left:2px solid var(--gold);background:var(--goldGhost);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:12px;line-height:1.5;color:var(--ink2)}
     .setcount{display:flex;flex-direction:column;align-items:center;gap:1px;border:1px solid var(--goldDim);border-radius:var(--r-md);background:rgba(var(--goldDim-rgb),.2);padding:7px 13px;flex:0 0 auto}
     .setcount b{font-family:var(--mono);font-size:16px;color:var(--gold2);font-variant-numeric:tabular-nums}
@@ -334,10 +363,9 @@
     .alt-card.near{border-style:dashed}
     .secondary.block{width:100%}
     /* ---- coached program chooser ---- */
-    .media.corrected{background:var(--bg);border-color:var(--goldDim)}
-    .media.corrected img{width:100%;height:auto;object-fit:contain;filter:none;mix-blend-mode:normal}
-    .demo-note{margin-top:11px;padding:10px 12px;border:1px dashed var(--line2);border-radius:var(--r-md);background:var(--bg2)}
-    .demo-note p{margin:0;color:var(--ink2);font-size:12.5px;line-height:1.6}
+    .demo-note{margin-top:10px;padding-left:11px;border-left:2px solid var(--line2)}
+    .demo-note p{margin:0;color:var(--muted);font-size:13px;line-height:1.55}
+    .demo-note .coach-h{margin-bottom:4px}
     .preset{margin-top:10px;border:1px solid var(--line)}
     .preset.is-on{border-color:var(--goldDim);background:var(--goldGhost)}
     .pill.gold{background:var(--goldGhost);color:var(--gold2);border-color:var(--goldDim);padding:2px 8px;font-size:9.5px;letter-spacing:1.1px;text-transform:uppercase;font-family:inherit;font-weight:800;min-width:0;vertical-align:2px}
@@ -411,8 +439,8 @@
     .bank-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:13px}
     .bank-card{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);padding:9px;text-align:left;display:grid;gap:7px;transition:border-color .15s var(--e),transform .12s var(--e)}
     .bank-card.in-plan{opacity:.45}
-    .bank-media{display:block;border-radius:9px;overflow:hidden;background:var(--media-bg);border:1px solid var(--line);min-height:86px}
-    .bank-media img{display:block;width:100%;height:106px;object-fit:contain;background:transparent;filter:invert(1) hue-rotate(180deg) contrast(1.04);mix-blend-mode:screen}
+    .bank-media{display:block;border-radius:9px;overflow:hidden;background:linear-gradient(175deg,var(--plate),var(--plate2));border:1px solid var(--goldDim);min-height:86px;isolation:isolate}
+    .bank-media img{display:block;width:100%;height:106px;object-fit:contain;background:transparent;mix-blend-mode:multiply}
     .bank-name{font-weight:800;font-size:12.5px;line-height:1.3}
     .bank-meta{color:var(--faint);font-size:10.5px}
 
@@ -498,19 +526,18 @@
       /* The rep number is the most-read value on this screen. Give it the
          slack: trim the label columns so the stepper's input keeps real width
          instead of collapsing to a sliver between the two buttons. */
-      .setrow{grid-template-columns:40px 34px minmax(0,1fr) 66px;gap:5px}
-      .setrow.adv{grid-template-columns:30px 26px minmax(0,1fr) 38px 52px;gap:4px}
+      .setrow{grid-template-columns:44px minmax(0,1fr) 72px;gap:6px}
+      .setrow.adv{grid-template-columns:44px minmax(0,1fr) 40px 58px;gap:5px}
       .setrow.adv .rep-step .step-btn{width:44px;height:44px}
       .setrow.adv .rep-step{gap:4px}
-      .setn{font-size:9px}
-      .prev{font-size:9px}
+      .setn b{font-size:14px}
       .rep-step .step-btn{width:44px}
       .rep-step{gap:5px}
       .level-head>.pill{flex:0 0 auto}
       .exercise{padding:13px 11px}
       .ex-head{align-items:center}
-      .ex-name{font-size:16px}
-      .media img{max-height:170px}
+      .ex-name{font-size:19px}
+      .media img{max-height:236px}
       .mini-btn{padding:8px 10px}
       .calendar-card{padding:14px 12px}
       .calendar-title{display:block}
