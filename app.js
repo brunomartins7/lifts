@@ -563,8 +563,14 @@ function rank(s){if(s>=90)return'Goal Range';if(s>=75)return'Advanced Track';if(
 function daysBetween(a,b){return Math.round((new Date(b)-new Date(a))/86400000)}
 
 function normalizeEntry(ex,e){const b=baselineEntry(ex);const raw=(e&&Array.isArray(e.reps)&&e.reps.length)?e.reps:b.reps;const reps=raw.slice(0,6).map(r=>clamp(Number(r)||0,0,100));while(reps.length<1)reps.push(Number(ex.min)||1);const warmups=Array.isArray(e&&e.warmups)?e.warmups.slice(0,3).map(w=>({weight:clamp(Number(w.weight)||0,0,500),reps:clamp(Number(w.reps)||0,0,100),done:Boolean(w.done)})):[];const out={weight:Number((e&&e.weight)??b.weight)||0,reps,warmups};
-  if(e&&Array.isArray(e.setWeights)&&e.setWeights.some(w=>Number(w)>0)){
-    out.weights=reps.map((_,i)=>{const w=Number(e.setWeights[i]);return isFinite(w)&&w>0?w:out.weight});
+  /* It reads setWeights (what a live draft carries) but writes weights (what a
+     saved entry carries), so passing a saved entry back through — which happens
+     on every reload, import and merge — silently dropped the per-set loads and
+     flattened them onto the work weight. Accept either shape. */
+  const stamped=(e&&Array.isArray(e.setWeights)&&e.setWeights.some(w=>Number(w)>0))?e.setWeights
+    :(e&&Array.isArray(e.weights)&&e.weights.some(w=>Number(w)>0))?e.weights:null;
+  if(stamped){
+    out.weights=reps.map((_,i)=>{const w=Number(stamped[i]);return isFinite(w)&&w>0?w:out.weight});
     if(out.weights.every(w=>w===out.weights[0])) delete out.weights;   // only store it when it varies
     else out.weight=representativeLoad(out);   // the working load, not the heaviest set
   }if(e&&Array.isArray(e.rpe)&&e.rpe.some(x=>x>0)){out.rpe=reps.map((_,i)=>{const v=Number(e.rpe[i])||0;return v?clamp(v,5,10):0});}return out}
@@ -1769,6 +1775,11 @@ function readJournal(){ try{ const j=JSON.parse(STORAGE.getItem(JOURNAL_KEY)||'[
 function suspectSessions(){
   return sortedSessions().map(sess=>{
     const sets=Object.values(sess.entries||{}).reduce((n,e)=>n+((e.reps||[]).length),0);
+    /* Editing a session clears completion because it can no longer be known.
+       Number(null) is 0, which made every corrected workout look like a session
+       where nothing was performed — and offered it for bulk deletion. Unknown is
+       not zero. */
+    if(sess.completion==null) return null;
     const pct=Number(sess.completion);
     if(!sets||!isFinite(pct)||pct>=100) return null;
     const performed=Math.round(sets*clamp(pct,0,100)/100);
@@ -2027,20 +2038,28 @@ const GRIND=[
   'Nobody cares what you did yesterday. What have you done today? — David Goggins'
 ];
 function overloadNudge(ex){
-  if(!state.session||ex.scoreMode==='reps') return null;
+  if(!state.session||ex.scoreMode==='reps'||inDeload()) return null;
   const d=state.session.draft[ex.id]; if(!d) return null;
   const hist=sessionsForEx(ex); if(!hist.length) return null;
   const lastEntry=hist[hist.length-1].entry;
   const lastW=representativeLoad(lastEntry);
   const cur=Number(d.weight)||0;
   if(!(lastW>0)) return null;
+  /* The app itself reduces the load after a session that fell under the rep
+     floor. Quoting Goggins at him for following his own programme is absurd. */
+  if(targetFromLast(ex,lastEntry).backedOff) return null;
   if(cur < lastW-0.01){
     return {tone:'down',title:`${fmtKg(lastW)} last time. ${fmtKg(cur)} today.`,
       text:GRIND[Math.floor(Date.now()/86400000)%GRIND.length]};
   }
   /* Three exposures at one load is a plateau whatever the reps say. */
-  const loads=hist.slice(-3).map(h=>representativeLoad(h.entry));
-  if(loads.length>=3 && loads.every(w=>Math.abs(w-lastW)<0.01) && cur<=lastW+0.01){
+  /* Three sessions at one load is only a plateau if the reps stopped moving too.
+     6/6/6 to 7/7/7 to 8/8/8 is textbook overload and was being called stuck. */
+  const last3=hist.slice(-3);
+  const loads=last3.map(h=>representativeLoad(h.entry));
+  const totals=last3.map(h=>(h.entry.reps||[]).reduce((a,r)=>a+(Number(r)||0),0));
+  const repsStalled=totals.length>=3 && totals[2]<=totals[0];
+  if(loads.length>=3 && loads.every(w=>Math.abs(w-lastW)<0.01) && cur<=lastW+0.01 && repsStalled){
     const inc=Number(ex.inc||2.5);
     const topped=(lastEntry.reps||[]).every(r=>r>=Number(ex.max));
     return {tone:'hold',title:`Three sessions stuck at ${fmtKg(lastW)}.`,
@@ -2499,6 +2518,13 @@ window.addEventListener('error',ev=>{if(!crashed){crashed=true;try{app.innerHTML
 adoptRecoveryLink();
 journalBoot();
 
+/* Read the mirror BEFORE anything can write to it. The upgrade below calls
+   save(), which queues an IndexedDB write of the current — possibly empty —
+   ledger, and both operations wait on the same readiness promise in the order
+   they were registered. Registering the read first is what stops the safety net
+   overwriting the copy it exists to recover. */
+const idbRescue = state.__fresh ? IDB.read() : null;
+
 /* The rebuilt programme is applied, not offered. Deferred while a workout is
    open, because replacing the program under an active draft would discard it;
    it lands on the next launch instead. A snapshot is taken first, so Data can
@@ -2538,8 +2564,8 @@ if(state.session && (now()-(state.session.startedAt||now())) > 10*3600*1000){
 
 /* localStorage can be cleared while the IndexedDB mirror survives — that is the
    whole point of keeping a second copy, and until now nothing ever read it. */
-if(state.__fresh){
-  IDB.read().then(mirror=>{
+if(idbRescue){
+  idbRescue.then(mirror=>{
     if(!mirror || !Array.isArray(mirror.sessions) || !mirror.sessions.length) return;
     if(state.sessions.length) return;                 // cloud sync got there first
     const n=mirror.sessions.length;
