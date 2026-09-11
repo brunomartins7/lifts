@@ -60,7 +60,7 @@ for (const d of days) {
 /* The coached allocation. Constrained by the equipment he actually has: no
    pulldown station, no pec deck, no T-bar, so the back is built from rows and a
    chin-up is offered only as an option. Free-weight biased by design. */
-const AGREED = { shoulders: 15, back: 12, chest: 9, biceps: 9, triceps: 9 };
+const AGREED = { shoulders: 15, back: 12, chest: 9, triceps: 9, biceps: 6, forearms: 3 };
 
 /* No exercise may fall on consecutive days. The rotation wraps, so C into A is a
    consecutive pair too — that is the one that is easy to miss. */
@@ -81,14 +81,18 @@ covers('mid-back',           ['dumbbell-incline-row','cable-rope-seated-row','ca
 covers('front delts',        ['dumbbell-seated-shoulder-press','barbell-seated-overhead-press','dumbbell-standing-overhead-press']);
 covers('lateral delts',      ['dumbbell-lateral-raise','cable-lateral-raise','cable-one-arm-lateral-raise','dumbbell-upright-row']);
 covers('rear delts',         ['dumbbell-reverse-fly','cable-standing-rear-delt-row-with-rope','dumbbell-rear-lateral-raise']);
-covers('biceps long head',   ['dumbbell-incline-curl']);
-covers('biceps short head',  ['dumbbell-concentration-curl','dumbbell-preacher-curl','barbell-preacher-curl']);
-covers('brachialis/forearm', ['dumbbell-hammer-curl','dumbbell-cross-body-hammer-curl','barbell-reverse-curl']);
+covers('biceps',             ['dumbbell-standing-biceps-curl','barbell-curl','dumbbell-incline-curl']);
+covers('brachialis',         ['dumbbell-cross-body-hammer-curl','dumbbell-hammer-curl']);
+covers('forearms',           ['barbell-reverse-curl','dumbbell-standing-reverse-curl','cable-reverse-curl']);
 covers('triceps long head',  ['dumbbell-seated-triceps-extension','cable-overhead-triceps-extension-rope-attachment','dumbbell-standing-triceps-extension']);
 covers('triceps lat/medial', ['cable-pushdown-with-rope-attachment','cable-triceps-pushdown-v-bar','dumbbell-lying-triceps-extension']);
 const defaults = days.flatMap(d => d.groups.flatMap(g => g.slots.map(sl => byId[sl.options[0]])));
 const freeWeight = defaults.filter(b => b.equipment === 'barbell' || b.equipment === 'dumbbell').length;
 assert.ok(freeWeight >= 12, `only ${freeWeight} of ${defaults.length} default exercises are free weights; he asked for a free-weight programme`);
+assert.ok(!everySlot.some(i => byId[i].muscle === 'chest' && /fly/.test(i)),
+  'a chest fly is back in the programme; he replaced it with an incline press');
+assert.ok(everySlot.filter(i => byId[i].id.startsWith('dumbbell') && patternOf(byId[i]) === 'lateral-raise').length <= 1,
+  'two dumbbell lateral raises in one week');
 assert.deepEqual(tally, AGREED, `weekly direct sets drifted:\n  got ${JSON.stringify(tally)}\n  want ${JSON.stringify(AGREED)}`);
 
 /* ---- progression ---- */
