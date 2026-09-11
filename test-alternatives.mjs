@@ -18,7 +18,7 @@ const slice = (start, end) => {
 const ctx = {};
 const code = [
   slice('const BANK=[', '\nconst MUSCLES'),   // carries COACHING and ALTERNATIVES with it
-  slice('const PATTERNS = [', '\n/* The load he should use'),
+  slice('const UNAVAILABLE = ', '\n/* The load he should use'),   // equipment filter, PATTERNS and the swap tiers
   'ctx.BANK = BANK; ctx.patternOf = patternOf; ctx.alternativesFor = alternativesFor;'
 ].join('\n');
 new Function('ctx', code)(ctx);
@@ -31,6 +31,8 @@ for (const ex of BANK) {
 
   for (const a of alts) {
     assert.notEqual(a.id, ex.id, `${where}: offered as its own alternative`);
+    assert.ok(!/^(lever-|sled-)|pulldown|smith-/.test(a.id),
+      `${where}: offers ${a.id}, a machine he does not have`);
     assert.notEqual(a.clip, ex.clip, `${where}: alternative ${a.id} is the same movement under another id`);
     assert.equal(a.muscle, ex.muscle, `${where}: alternative ${a.id} trains ${a.muscle}, not ${ex.muscle}`);
     if (patternOf(ex)) {

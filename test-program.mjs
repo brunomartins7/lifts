@@ -42,6 +42,8 @@ for (const d of days) {
       assert.ok(byId[o], `unknown exercise id ${o}`);
       assert.ok(!LEGS.includes(byId[o].muscle), `${o} is lower body — this programme is upper body only`);
       assert.notEqual(byId[o].muscle, 'core', `${o} is abdominal work — the owner removed it to fund the arms`);
+      assert.ok(!/^(lever-|sled-)|pulldown/.test(o),
+        `${o} needs a machine he does not have — no lever, sled or pulldown stations`);
     }
     const b = byId[sl.options[0]];
     tally[b.muscle] = (tally[b.muscle] || 0) + sl.sets;
@@ -54,11 +56,13 @@ for (const d of days) {
       `day ${d.id} puts incline straight after bench`);
   }
 }
-/* The coached allocation. Sessions are never on back-to-back days, so every
-   muscle gets at least 48 hours and the volume is higher than the version that
-   had to survive three days running. No abdominal work: the owner removed it and
-   those slots went to the arms and forearms. */
-const AGREED = { shoulders: 19, back: 16, forearms: 9, chest: 8, biceps: 8, triceps: 8 };
+/* The coached allocation. Constrained by the equipment he actually has: no
+   pulldown station, no pec deck, no T-bar, so the back is built from rows and a
+   chin-up is offered only as an option. Free-weight biased by design. */
+const AGREED = { back: 12, chest: 9, shoulders: 9, biceps: 6, triceps: 6 };
+const defaults = days.flatMap(d => d.groups.flatMap(g => g.slots.map(sl => byId[sl.options[0]])));
+const freeWeight = defaults.filter(b => b.equipment === 'barbell' || b.equipment === 'dumbbell').length;
+assert.ok(freeWeight >= 12, `only ${freeWeight} of ${defaults.length} default exercises are free weights; he asked for a free-weight programme`);
 assert.deepEqual(tally, AGREED, `weekly direct sets drifted:\n  got ${JSON.stringify(tally)}\n  want ${JSON.stringify(AGREED)}`);
 
 /* ---- progression ---- */
