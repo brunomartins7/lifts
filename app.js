@@ -751,6 +751,23 @@ function repsAtLoad(entry,load){
   const at=(entry.reps||[]).filter((_,i)=>Number(entry.weights[i])===load);
   return at.length?at:(entry.reps||[]).slice();
 }
+/* What "beat it" actually means this session, spelled out. The numbers are
+   already pre-filled in the boxes below; this says why they are what they are,
+   so a week later he is not guessing whether to add a rep or add a plate.
+   One working week between sessions is the assumption — each lift comes round
+   once per rotation. */
+function beatItAdvice(ex,last,target){
+  const was=representativeLoad(last), now=Number(target.weight)||0;
+  const reps=(target.reps||[]).join(', ');
+  if(target.backedOff)
+    return `Drop to ${fmtKg(now)} and rebuild: ${reps}. A set fell under ${ex.min} reps, so the load comes down before it goes up.`;
+  if(now>was)
+    return `You topped the range everywhere, so add the plate: ${fmtKg(now)} for ${reps}. Reps restart at ${ex.min} and climb again from there.`;
+  const prev=(last.reps||[]);
+  const i=(target.reps||[]).findIndex((r,k)=>r>(prev[k]??0));
+  const which=i>=0?`set ${i+1}`:'the first set you can';
+  return `Stay at ${fmtKg(now)} and take ${which} to ${(target.reps||[])[i>=0?i:0]}: ${reps}. Add the plate once every set hits ${ex.max}.`;
+}
 function targetFromLast(ex,last){
   const inc=Number(ex.inc||2.5);
   let weight=representativeLoad(last);
@@ -1280,7 +1297,35 @@ function step(exId,kind,index,dir){
    what he picks up; everything else stores the total. */
 /* A cable stack and a machine have no barbell equivalent, so offering one is
    noise. Only free weights get the second box. */
-function barbellRelevant(ex){ return ex.equipment==='barbell'||ex.equipment==='dumbbell'; }
+/* How the load is carried, which decides whether the second weight box means
+   anything. Three cases, and the old code collapsed them into one:
+
+   'convertible'  both hands, one implement each, and the movement genuinely
+                  exists with a bar — a bench press, a curl, a shoulder press.
+                  Two boxes: in each hand, and the same load on a bar.
+   'pair'         both hands, one dumbbell each, but no barbell version of the
+                  movement exists. A fly, a lateral raise, a hammer curl. One
+                  box, labelled per dumbbell, because doubling it would offer a
+                  bar he cannot use for it.
+   'single'       one implement in total — one dumbbell held in both hands for
+                  an overhead extension, a goblet squat, an EZ-bar french
+                  press — or one arm working at a time. One box, and no
+                  doubling: an overhead dumbbell extension with 20kg is 20kg,
+                  not 40, and pretending otherwise inflates every score it
+                  feeds.
+*/
+const ONE_IMPLEMENT = /one-arm|cross-body|concentration|kickback|goblet|french-press|over-bench-wrist-curl|standing-triceps-extension|seated-triceps-extension|pullover/;
+const NO_BARBELL_VERSION = /fly|lateral-raise|rear-lateral|front-raise|hammer-curl|incline-curl|zottman|incline-row|close-grip-bench-press/;
+function loadStyle(ex){
+  const id=ex.id||'';
+  if(ex.equipment!=='barbell'&&ex.equipment!=='dumbbell') return 'single';
+  if(ONE_IMPLEMENT.test(id)) return 'single';
+  if(NO_BARBELL_VERSION.test(id)) return 'pair';
+  return 'convertible';
+}
+function barbellRelevant(ex){ return loadStyle(ex)==='convertible'; }
+/* "Each dumbbell" is only honest when there are two of them. */
+function loadLabel(ex){ return (ex.equipment==='dumbbell'&&loadStyle(ex)!=='single')?'Each dumbbell':'Work weight'; }
 function equivWeight(ex,w){
   const v=Number(w)||0;
   return Number((ex.equipment==='dumbbell'?v*2:v/2).toFixed(2));
@@ -2169,10 +2214,10 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
      disclosure so the card ends at the thing you actually came to tap. */
   return `<article class="exercise" id="ex-${esc(ex.id)}">
   <div class="ex-head"><div><div class="ex-name">${esc(ex.name)}${ex.isExtra?'':`<span class="reorder"><button data-action="move-ex-up" data-ex="${esc(baseId)}" aria-label="Move ${esc(ex.name)} earlier"${pos.index<=0?' disabled':''}>&#9650;</button><button data-action="move-ex-down" data-ex="${esc(baseId)}" aria-label="Move ${esc(ex.name)} later"${pos.index>=pos.total-1?' disabled':''}>&#9660;</button></span>`}</div>${warnLine?`<div class="ex-meta">${warnLine}</div>`:''}
-  <div class="lasttime"><span class="lasttime-lab">Beat this</span><span class="lasttime-val${hasHistory?'':' none'}">${hasHistory?esc(fmtEntry(last)):'Nothing logged yet!'}</span><span class="lasttime-when">${hasHistory?esc(lastWhen)+' · ':''}aim ${ex.min}-${ex.max}</span></div>
+  <div class="lasttime"><span class="lasttime-lab">Beat this</span><span class="lasttime-val${hasHistory?'':' none'}">${hasHistory?esc(fmtEntry(last)):'Nothing logged yet!'}</span><span class="lasttime-when">${hasHistory?esc(lastWhen)+' · ':''}aim ${ex.min}-${ex.max}</span>${hasHistory?`<div class="beatit">${esc(beatItAdvice(ex,last,target))}</div>`:''}</div>
   ${nudge?`<div class="nudge ${nudge.tone}"><strong>${esc(nudge.title)}</strong><div>${esc(nudge.text)}</div></div>`:''}</div></div>
   <div class="step-grid ${barbellRelevant(ex)?'':'one'}">
-    <div><div class="step-label">${ex.equipment==='dumbbell'?'Each dumbbell':'Work weight'}</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="2.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div></div>
+    <div><div class="step-label">${loadLabel(ex)}</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="-1" aria-label="Decrease weight">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="2.5" min="0" max="500" value="${d.weight}" data-num="weight" data-ex="${ex.id}" aria-label="Work weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="weight" data-dir="1" aria-label="Increase weight">+</button></div></div>
     ${barbellRelevant(ex)?`<div><div class="step-label">${ex.equipment==='dumbbell'?'Barbell equivalent':'Per dumbbell'}</div><div class="step-controls"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="equiv" data-dir="-1" aria-label="Decrease">−</button><input class="step-val num-in" inputmode="decimal" type="number" step="2.5" min="0" max="500" value="${equivWeight(ex,d.weight)}" data-num="equiv" data-ex="${ex.id}" aria-label="Equivalent weight in KG"><button class="step-btn" data-action="step" data-ex="${ex.id}" data-kind="equiv" data-dir="1" aria-label="Increase">+</button></div></div>`:''}
   </div>
   ${!barbellRelevant(ex)?'':`<div class="convert small faint">${ex.equipment==='dumbbell'?`${fmtKg(d.weight)} in each hand is the same total as a ${fmtKg(equivWeight(ex,d.weight))} barbell.`:`${fmtKg(d.weight)} on the bar is the same total as ${fmtKg(equivWeight(ex,d.weight))} in each hand.`}</div>`}
