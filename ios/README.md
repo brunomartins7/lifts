@@ -25,13 +25,26 @@ Do not skip step 3. It is the only copy that does not live inside a browser.
 
 ## 1. Get Xcode
 
+`xcodes` and `aria2` are already installed on this Mac. One command left:
+
 ```
-brew install xcodesorg/made/xcodes
-xcodes install --latest
+xcodes install 26.6
 ```
 
-Sign in with your ordinary Apple ID when it asks. A free account is enough.
-~7GB down, ~23GB expanded.
+It will ask for three things, in this order:
+
+1. **Apple ID email**, then password, then the 6-digit code from your phone.
+   An ordinary free Apple ID is enough — this is not the paid programme.
+2. Nothing for a while. ~7GB down, then it expands to ~23GB. aria2 is
+   installed so the download runs on 16 connections instead of one.
+3. **Your Mac password**, to move Xcode into /Applications.
+
+26.6 matches this Mac's macOS. `--latest` would also work — it skips betas —
+but the explicit version cannot surprise you.
+
+If the terminal login is being difficult, the same file is at
+https://developer.apple.com/download/all (search "Xcode 26.6", take the .xip,
+double-click it, drag the result into Applications). Same free Apple ID.
 
 ## 2. Build the web app into the wrapper
 
