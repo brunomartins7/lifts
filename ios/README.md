@@ -17,7 +17,7 @@ both read the same ledger:
 
 1. Open the website → **Data** → cloud sync → create the gist and save the token.
 2. Press **Save to cloud**. Check it says it worked.
-3. Press **Back up my data** and keep the JSON file somewhere safe.
+3. Press **Export JSON** and keep that file somewhere safe.
 
 Do not skip step 3. It is the only copy that does not live inside a browser.
 
@@ -66,7 +66,7 @@ In Xcode: select **BrunianLifts** in the file list → **Signing & Capabilities*
 In the app: **Data** → cloud sync → paste the same gist ID and token → **Load
 from cloud**. Check your last session is there before you trust it.
 
-If sync is not set up, use **Restore from a backup** and pick the JSON instead.
+If sync is not set up, use **Import JSON** and pick the file from step 3 instead.
 
 ## 6. Allow it during Downtime
 
