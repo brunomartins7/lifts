@@ -9,10 +9,12 @@
 /* Begin PBXBuildFile section */
 		79A297A5E82AC460E430E6DC /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCFA38EF407BC6C65A4D3A51 /* AppDelegate.swift */; };
 		989CC24DDD97619BFDD4E8E6 /* www in Resources */ = {isa = PBXBuildFile; fileRef = 332EF975D318674EE8E048E0 /* www */; };
+		A09CF4451BE86FD3DB338821 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 506C7089A982E526DA51DFC7 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		332EF975D318674EE8E048E0 /* www */ = {isa = PBXFileReference; lastKnownFileType = folder; name = www; path = BrunianLifts/www; sourceTree = SOURCE_ROOT; };
+		506C7089A982E526DA51DFC7 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B3F52C0F892BF8171578A3D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		CCFA38EF407BC6C65A4D3A51 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		E6449BC54C87368B90FF5BC7 /* BrunianLifts.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BrunianLifts.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -31,6 +33,7 @@
 			isa = PBXGroup;
 			children = (
 				CCFA38EF407BC6C65A4D3A51 /* AppDelegate.swift */,
+				506C7089A982E526DA51DFC7 /* Assets.xcassets */,
 				B3F52C0F892BF8171578A3D9 /* Info.plist */,
 				332EF975D318674EE8E048E0 /* www */,
 			);
@@ -105,6 +108,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A09CF4451BE86FD3DB338821 /* Assets.xcassets in Resources */,
 				989CC24DDD97619BFDD4E8E6 /* www in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
