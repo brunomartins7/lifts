@@ -25,26 +25,31 @@ Do not skip step 3. It is the only copy that does not live inside a browser.
 
 ## 1. Get Xcode
 
-`xcodes` and `aria2` are already installed on this Mac. One command left:
+**Download it in Safari, not the terminal.** `xcodes install` cannot sign in at
+the moment: Apple removed the endpoint it fetches a service key from before the
+login, so it dies with a 404 the instant you type your Apple ID, before it ever
+asks for a password. Nothing to do with your account.
+(XcodesOrg/xcodes issue #490.)
+
+1. Open **https://developer.apple.com/download/all** in Safari.
+2. Sign in with your ordinary Apple ID. Free account, no payment. Accept the
+   agreement if it asks.
+3. Type `Xcode 26.6` in the search box on that page.
+4. Click the **.xip** link. ~7GB into `~/Downloads`.
+5. Then let xcodes do the unpacking and installing — this path never logs in,
+   so the bug cannot bite:
 
 ```
-xcodes install 26.6
+xcodes install 26.6 --path ~/Downloads/Xcode_26.6.xip
 ```
 
-It will ask for three things, in this order:
+   It will ask for your Mac password to put Xcode in /Applications.
 
-1. **Apple ID email**, then password, then the 6-digit code from your phone.
-   An ordinary free Apple ID is enough — this is not the paid programme.
-2. Nothing for a while. ~7GB down, then it expands to ~23GB. aria2 is
-   installed so the download runs on 16 connections instead of one.
-3. **Your Mac password**, to move Xcode into /Applications.
+   If the filename differs, use whatever actually landed:
+   `ls ~/Downloads/*.xip`
 
-26.6 matches this Mac's macOS. `--latest` would also work — it skips betas —
-but the explicit version cannot surprise you.
-
-If the terminal login is being difficult, the same file is at
-https://developer.apple.com/download/all (search "Xcode 26.6", take the .xip,
-double-click it, drag the result into Applications). Same free Apple ID.
+Double-clicking the .xip in Finder and dragging the result into Applications
+works too. It is slower and gives you no progress bar.
 
 ## 2. Build the web app into the wrapper
 
