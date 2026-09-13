@@ -56,6 +56,27 @@ jobs:
           done
           echo "every bundled file matches the website byte for byte"
 
+      # The check above only proves the bundle matched a copy CI made itself.
+      # This proves the Xcode pre-build hook does the copying: change a root file,
+      # rebuild without touching sync-web.sh, and the change must appear in the
+      # bundle. Without this, the hook could be deleted and CI would stay green.
+      - name: The pre-build hook must pick up a website change on its own
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="/* ci-freshness-$GITHUB_RUN_ID */"
+          printf '\n%s\n' "$marker" >> tokens.css
+          cd ios
+          xcodebuild -project BrunianLifts.xcodeproj -scheme BrunianLifts \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug CODE_SIGNING_ALLOWED=NO build > /tmp/rebuild.log 2>&1
+          cd ..
+          app=$(find ~/Library/Developer/Xcode/DerivedData -name 'BrunianLifts.app' -type d | head -1)
+          grep -qF "$marker" "$app/www/tokens.css" \
+            && echo "the pre-build hook re-synced the bundle on its own" \
+            || { echo "STALE: the bundle did not pick up a website change"; exit 1; }
+          git checkout -- tokens.css
+
       - name: Check the web app actually got bundled
         shell: bash
         run: |

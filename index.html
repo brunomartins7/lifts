@@ -46,7 +46,12 @@
     .shell.has-finish{padding-bottom:calc(160px + env(safe-area-inset-bottom))}
 
     /* ============ Header (mobile: slim top bar) ============ */
-    .head{position:sticky;top:0;z-index:60;padding:10px 0;margin:0 -16px;background:linear-gradient(180deg,rgba(var(--bg-rgb),.97) 55%,rgba(var(--bg-rgb),.82) 85%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+    /* The top inset is the status bar and the notch. In a browser tab it is
+       zero and nothing moves; in the installed home-screen app and in the iOS
+       wrapper it is real, and without this the clock prints straight through
+       the brand and the Dynamic Island sits on the score. Every other edge of
+       this app already respects its inset — this one was missed. */
+    .head{position:sticky;top:0;z-index:60;padding:calc(10px + env(safe-area-inset-top)) 0 10px;margin:0 -16px;background:linear-gradient(180deg,rgba(var(--bg-rgb),.97) 55%,rgba(var(--bg-rgb),.82) 85%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
     .appbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 16px}
     .brand{display:flex;align-items:center;gap:11px;min-width:0}
     .mark{width:40px;height:40px;border-radius:13px;display:grid;place-items:center;color:var(--gold2);border:1px solid var(--goldDim);background:linear-gradient(150deg,rgba(var(--gold-rgb),.22),rgba(var(--ink-rgb),.03));box-shadow:inset 0 1px 0 rgba(var(--ink-rgb),.09),0 8px 20px rgba(0,0,0,.35);flex:0 0 auto}

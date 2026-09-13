@@ -52,6 +52,12 @@ final class WebAppViewController: UIViewController, WKNavigationDelegate, WKUIDe
     config.allowsInlineMediaPlayback = true
     config.mediaTypesRequiringUserActionForPlayback = []
 
+    /* The web app asks for a screen wake lock while a session is running. That
+       API needs a secure context and a custom scheme is not one, so in here it
+       is unavailable and the screen would sleep between sets — something the
+       website does not do. The same request arrives on this channel instead. */
+    config.userContentController.add(WakeBridge.shared, name: "wake")
+
     let web = WKWebView(frame: .zero, configuration: config)
     web.navigationDelegate = self
     web.uiDelegate = self
@@ -159,6 +165,33 @@ extension WebAppViewController {
     a.addAction(UIAlertAction(title: "OK", style: .default))
     present(a, animated: true)
   }
+}
+
+/*  Holds the screen awake while a workout is open, and only then. Mirrors what
+    navigator.wakeLock does for the website, so a session behaves the same in
+    both. Deliberately not a blanket "never sleep": it follows the web app's own
+    lifecycle, and the idle timer is released when the app leaves the
+    foreground so a forgotten session cannot flatten the battery in a pocket. */
+final class WakeBridge: NSObject, WKScriptMessageHandler {
+  static let shared = WakeBridge()
+  private var wanted = false
+
+  override init() {
+    super.init()
+    let nc = NotificationCenter.default
+    nc.addObserver(self, selector: #selector(background), name: UIApplication.didEnterBackgroundNotification, object: nil)
+    nc.addObserver(self, selector: #selector(foreground), name: UIApplication.didBecomeActiveNotification, object: nil)
+  }
+
+  func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+    guard message.name == "wake" else { return }
+    wanted = (message.body as? Bool) ?? ((message.body as? NSNumber)?.boolValue ?? false)
+    apply()
+  }
+
+  @objc private func background() { UIApplication.shared.isIdleTimerDisabled = false }
+  @objc private func foreground() { apply() }
+  private func apply() { UIApplication.shared.isIdleTimerDisabled = wanted }
 }
 
 /*  Serves the bundled copy of the web app. Kept deliberately narrow: it only

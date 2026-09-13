@@ -504,7 +504,10 @@ let persistGranted = null;                 // null = unknown, true/false = answe
 let saveFailed = false;                    // last main write rejected (quota)
 async function requestPersistence(){
   try{
-    if(!navigator.storage || !navigator.storage.persist) return;
+    /* No Storage API at all is an answer, not a silence. Returning here left
+       persistGranted null forever, so the Data screen sat on "Checking" and the
+       missing-protection warning never fired. */
+    if(!navigator.storage || !navigator.storage.persist){ persistGranted = false; return; }
     persistGranted = await navigator.storage.persisted();
     if(!persistGranted) persistGranted = await navigator.storage.persist();
   }catch(_){ persistGranted = false; }
@@ -1240,6 +1243,14 @@ function clearRest(){restUntil=null;clearInterval(restTimer);restTimer=null;cons
 function beep(){try{if(!state.settings.soundOn)return;const ctx=new (window.AudioContext||window.webkitAudioContext)();const o=ctx.createOscillator(),g=ctx.createGain();o.connect(g);g.connect(ctx.destination);o.frequency.value=880;g.gain.setValueAtTime(.001,ctx.currentTime);g.gain.exponentialRampToValueAtTime(.18,ctx.currentTime+.02);g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+.5);o.start();o.stop(ctx.currentTime+.55)}catch(_){}}
 function vibrate(pat){try{navigator.vibrate&&navigator.vibrate(pat)}catch(_){}}
 async function holdWake(on){
+  /* Keeping the screen awake during a session is not a nicety — the phone is on
+     a bench between sets and a locked screen means unlocking with chalky hands
+     mid-workout. The Screen Wake Lock API needs a secure context, which the iOS
+     wrapper's custom scheme is not, so there it is silently unavailable and the
+     screen would sleep where the website keeps it lit. When the wrapper is the
+     host it exposes the same capability natively; this asks for whichever one
+     exists. In a browser the bridge is absent and this line does nothing. */
+  try{ window.webkit?.messageHandlers?.wake?.postMessage(Boolean(on)); }catch(_){}
   try{
     if(on && 'wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); }
     else if(!on && wakeLock){ await wakeLock.release(); wakeLock=null; }
@@ -1888,7 +1899,12 @@ function storageHealth(){
     const n=(state.sessions||[]).length;
     if(n) return{level:'warn',title:'No off-device copy',msg:`This device holds the only copy of your ${n} logged session${n===1?'':'s'}. Nothing has been lost, but a wipe, a lost phone or a cleared Safari would take all of it. Cloud sync in Data is the fix.`};
   }
-  if(persistGranted===false)return{level:'warn',title:'Eviction protection missing',msg:'This browser has not granted persistent storage, so it may clear your ledger after about a week idle. Add the app to your home screen and set up cloud sync — both are in this screen.'};
+  /* The advice has to match where it is being read. Inside the iOS wrapper
+     there is no home screen to add anything to, and telling him to do it there
+     is instructions for a screen that does not exist. */
+  if(persistGranted===false)return{level:'warn',title:'Eviction protection missing',msg:proto.startsWith('http')
+    ?'This browser has not granted persistent storage, so it may clear your ledger after about a week idle. Add the app to your home screen and set up cloud sync — both are in this screen.'
+    :'This app has not been granted persistent storage, so iOS may clear your ledger if the device runs low on space. Cloud sync, in this screen, is the fix.'};
   if(proto==='file:')return{level:'warn',msg:'Running from a local file. Some phones clear file-based storage. Use one stable hosted URL (see the guide in Data) and set up cloud sync.'};
   if(/netlify\.app$/.test(host)&&(state.sessions||[]).length===0)return{level:'warn',msg:'Every new Netlify Drop upload is a brand-new site with empty storage. Deploy once to a stable URL and keep using that link.'};
   return{level:'ok',msg:''};

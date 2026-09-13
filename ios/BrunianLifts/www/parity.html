@@ -12,9 +12,11 @@
   .ok{color:var(--ok,#7FCF9B)} .bad{color:var(--risk,#E08585)} .warn{color:var(--gold2,#F0C46F)}
   .verdict{margin-top:18px;padding:12px;border-radius:10px;border:1px solid var(--line,#272E3B)}
 </style>
-<h1>Parity check</h1>
-<p class="sub">Open this in Safari and in the app, and compare. Anything red is a real
-difference in what the app can do; anything amber degrades gracefully.</p>
+<h1>Capability probe</h1>
+<p class="sub">Open this in Safari and in the app and compare. It reports what this
+environment <em>can do</em> — it does not load the app or prove it works. Red is a
+capability the app relies on; amber degrades gracefully. Real parity is what
+<code>ios/stress-test.sh</code> checks.</p>
 <div id="out"></div>
 <div class="verdict" id="verdict"></div>
 <script>
@@ -62,7 +64,8 @@ render();
   render();
   const bad=rows.filter(r=>r.includes('class="v bad"')).length;
   document.getElementById('verdict').innerHTML = bad
-    ? `<b class="bad">${bad} real difference${bad===1?'':'s'}.</b> Do not move your log in until these are understood.`
-    : `<b class="ok">No functional differences.</b> Storage works, sync can reach GitHub, demos load.`;
+    ? `<b class="bad">${bad} capabilit${bad===1?'y':'ies'} missing.</b> Do not move your log in until these are understood.`
+    : `<b class="ok">Every capability present.</b> Storage round-trips, GitHub is reachable, demos load.
+       This is not proof the app works — run ios/stress-test.sh for that.`;
 })();
 </script>
