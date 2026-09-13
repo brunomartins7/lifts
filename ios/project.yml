@@ -24,6 +24,13 @@ targets:
       # every file inside is bundled with its path intact.
       - path: BrunianLifts/www
         type: folder
+    # Copies the web app in before every build. Without this the bundle can
+    # quietly fall behind the website, and the whole requirement is that the app
+    # runs the same code the site does.
+    preBuildScripts:
+      - name: Copy the web app into the bundle
+        script: '"$PROJECT_DIR"/sync-web.sh'
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.brunomartins.brunianlifts

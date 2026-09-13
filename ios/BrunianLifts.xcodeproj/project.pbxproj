@@ -52,6 +52,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3D4FB6D6275CA452C21048CC /* Build configuration list for PBXNativeTarget "BrunianLifts" */;
 			buildPhases = (
+				A6E9839406205F33C192AA08 /* Copy the web app into the bundle */,
 				294A77FF88D160EC541F1B29 /* Sources */,
 				79748EA94AE09445D27E8AD9 /* Resources */,
 			);
@@ -109,6 +110,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A6E9839406205F33C192AA08 /* Copy the web app into the bundle */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy the web app into the bundle";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"$PROJECT_DIR\"/sync-web.sh";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		294A77FF88D160EC541F1B29 /* Sources */ = {

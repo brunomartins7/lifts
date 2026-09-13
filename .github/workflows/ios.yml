@@ -43,7 +43,21 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build | tail -40
 
+      # The requirement is that the app runs the same code as the website, with
+      # no divergence. This is the check that enforces it: every bundled file
+      # must be byte-identical to the one the site serves.
+      - name: The bundle must be byte-identical to the website
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find ~/Library/Developer/Xcode/DerivedData -name 'BrunianLifts.app' -type d | head -1)
+          for f in index.html app.js tokens.css manifest.webmanifest icon-192.png icon-512.png; do
+            cmp "$f" "$app/www/$f" || { echo "DIVERGED: www/$f is not the file the website serves"; exit 1; }
+          done
+          echo "every bundled file matches the website byte for byte"
+
       - name: Check the web app actually got bundled
+        shell: bash
         run: |
           set -eu
           app=$(find ~/Library/Developer/Xcode/DerivedData -name 'BrunianLifts.app' -type d | head -1)

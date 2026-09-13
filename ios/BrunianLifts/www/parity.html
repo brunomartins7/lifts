@@ -1,0 +1,68 @@
+<!doctype html>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lifts — parity check</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body{font:15px/1.5 var(--body,system-ui);background:var(--bg,#0B0D12);color:var(--ink,#F2EFE7);margin:0;padding:18px}
+  h1{font-size:19px;margin:0 0 4px}
+  p.sub{color:var(--muted,#98A0AE);margin:0 0 16px;font-size:13px}
+  .row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--line,#272E3B);align-items:baseline}
+  .k{flex:0 0 42%;color:var(--muted,#98A0AE);font-size:13px}
+  .v{flex:1;font-family:var(--mono,ui-monospace);font-size:13px;word-break:break-all}
+  .ok{color:var(--ok,#7FCF9B)} .bad{color:var(--risk,#E08585)} .warn{color:var(--gold2,#F0C46F)}
+  .verdict{margin-top:18px;padding:12px;border-radius:10px;border:1px solid var(--line,#272E3B)}
+</style>
+<h1>Parity check</h1>
+<p class="sub">Open this in Safari and in the app, and compare. Anything red is a real
+difference in what the app can do; anything amber degrades gracefully.</p>
+<div id="out"></div>
+<div class="verdict" id="verdict"></div>
+<script>
+const rows=[];
+const add=(k,v,cls)=>rows.push(`<div class="row"><div class="k">${k}</div><div class="v ${cls||''}">${v}</div></div>`);
+const yn=(b)=>b?'yes':'no';
+
+add('origin', location.origin);
+add('protocol', location.protocol);
+add('secure context', yn(window.isSecureContext), window.isSecureContext?'ok':'warn');
+
+// storage — the only things that must not differ
+let ls='no';
+try{ localStorage.setItem('__parity','1'); ls=localStorage.getItem('__parity')==='1'?'yes':'wrote but did not read back'; localStorage.removeItem('__parity'); }
+catch(e){ ls='THROWS: '+e.name; }
+add('localStorage works', ls, ls==='yes'?'ok':'bad');
+add('IndexedDB present', yn(!!window.indexedDB), window.indexedDB?'ok':'bad');
+
+const existing=(()=>{try{return localStorage.getItem('brunian-lifts-v50')?.length||0}catch(_){return 0}})();
+add('ledger bytes in this origin', existing?existing.toLocaleString():'0 — this origin has no log yet', existing?'ok':'warn');
+
+// degrade-gracefully APIs
+add('clipboard API', yn(!!navigator.clipboard), navigator.clipboard?'ok':'warn');
+add('wakeLock API', yn('wakeLock' in navigator), ('wakeLock' in navigator)?'ok':'warn');
+add('storage.persist', yn(!!(navigator.storage&&navigator.storage.persist)), (navigator.storage&&navigator.storage.persist)?'ok':'warn');
+add('serviceWorker registers here', location.protocol.startsWith('http')?'yes':'no — not needed, files are local', location.protocol.startsWith('http')?'ok':'warn');
+
+// the two network calls the app actually makes
+const out=document.getElementById('out');
+const render=()=>out.innerHTML=rows.join('');
+render();
+
+(async()=>{
+  try{
+    const r=await fetch('https://api.github.com/rate_limit',{cache:'no-store'});
+    add('api.github.com reachable', r.status===200?'yes (200)':'HTTP '+r.status, r.ok?'ok':'bad');
+  }catch(e){ add('api.github.com reachable','BLOCKED: '+e.message,'bad'); }
+  await new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{ add('demo GIF loads','yes','ok'); res(); };
+    img.onerror=()=>{ add('demo GIF loads','BLOCKED','bad'); res(); };
+    img.src='https://raw.githubusercontent.com/JahelCuadrado/ExerciseGymGifsDB/main/pectorals/barbell-bench-press.gif';
+    setTimeout(()=>{ add('demo GIF loads','timed out','bad'); res(); },8000);
+  });
+  render();
+  const bad=rows.filter(r=>r.includes('class="v bad"')).length;
+  document.getElementById('verdict').innerHTML = bad
+    ? `<b class="bad">${bad} real difference${bad===1?'':'s'}.</b> Do not move your log in until these are understood.`
+    : `<b class="ok">No functional differences.</b> Storage works, sync can reach GitHub, demos load.`;
+})();
+</script>

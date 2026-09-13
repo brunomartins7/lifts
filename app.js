@@ -520,7 +520,16 @@ async function requestPersistence(){
 function recoveryLink(){
   const {gistId,gistToken} = state.settings;
   if(!gistId||!gistToken) return '';
-  try{ return `${location.origin}${location.pathname}#k=${btoa(`${gistId}:${gistToken}`)}`; }
+  /* Inside the iOS wrapper the page is served from a custom scheme, so
+     location.origin is brunianlifts://app — a link only that app can open, and
+     the entire point of this one is to restore the ledger somewhere else. Fall
+     back to the canonical address, which is already declared in the document
+     head. On the web the two are the same URL, so nothing changes there. */
+  let base = `${location.origin}${location.pathname}`;
+  if(!location.protocol.startsWith('http')){
+    base = document.querySelector('link[rel=canonical]')?.href || base;
+  }
+  try{ return `${base}#k=${btoa(`${gistId}:${gistToken}`)}`; }
   catch(_){ return ''; }
 }
 function adoptRecoveryLink(){
