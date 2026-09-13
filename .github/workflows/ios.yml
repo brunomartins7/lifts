@@ -1,0 +1,55 @@
+# Builds the iOS wrapper on every change to it or to the web app it bundles.
+# The point is verification: neither of us can build this without Xcode, and a
+# wrapper that does not compile is worse than no wrapper, because you find out
+# standing in a gym. Runs on GitHub's macOS runners, which are free for this
+# repo because it is public. No signing happens here — a simulator build proves
+# the code compiles and the bundle is assembled correctly, which is the part
+# that can actually be wrong.
+name: iOS wrapper
+
+on:
+  push:
+    paths: ['ios/**', 'index.html', 'app.js', 'tokens.css', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['ios/**', 'index.html', 'app.js', 'tokens.css']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy the web app into the bundle
+        run: ./ios/sync-web.sh
+
+      - name: Regenerate the project from project.yml
+        run: |
+          brew install xcodegen
+          cd ios && xcodegen generate --spec project.yml
+
+      - name: Build for the simulator
+        # shell: bash gives pipefail, without which `| tail` would report
+        # success even when xcodebuild failed — a green tick on a broken build.
+        shell: bash
+        run: |
+          cd ios
+          xcodebuild \
+            -project BrunianLifts.xcodeproj \
+            -scheme BrunianLifts \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            build | tail -40
+
+      - name: Check the web app actually got bundled
+        run: |
+          set -eu
+          app=$(find ~/Library/Developer/Xcode/DerivedData -name 'BrunianLifts.app' -type d | head -1)
+          echo "bundle: $app"
+          for f in index.html app.js tokens.css; do
+            test -f "$app/www/$f" || { echo "MISSING www/$f in the bundle"; exit 1; }
+          done
+          test ! -f "$app/www/sw.js" || { echo "sw.js should not be bundled"; exit 1; }
+          echo "web app bundled correctly"

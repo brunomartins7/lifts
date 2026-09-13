@@ -1,0 +1,33 @@
+name: BrunianLifts
+options:
+  bundleIdPrefix: com.brunomartins
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    # No team is set here on purpose. Xcode fills it in from whichever Apple ID
+    # you sign in with, so a free personal team works without editing anything.
+    CODE_SIGN_STYLE: Automatic
+targets:
+  BrunianLifts:
+    type: application
+    platform: iOS
+    sources:
+      - path: BrunianLifts
+        excludes:
+          - "www/**"
+      # The web app itself, copied in by sync-web.sh. A folder reference, so
+      # every file inside is bundled with its path intact.
+      - path: BrunianLifts/www
+        type: folder
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.brunomartins.brunianlifts
+        INFOPLIST_FILE: BrunianLifts/Info.plist
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MACCATALYST: NO
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
