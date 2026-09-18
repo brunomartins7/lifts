@@ -12,6 +12,11 @@ settings:
     # No team is set here on purpose. Xcode fills it in from whichever Apple ID
     # you sign in with, so a free personal team works without editing anything.
     CODE_SIGN_STYLE: Automatic
+    # Bruno's free personal team, taken from the OU of his Apple Development certificate
+    # — NOT the id in the certificate's NAME, which is a different value and yields
+    # "No Account for Team". Without this line a command-line build cannot sign at all:
+    # it worked only because the team was being chosen by hand in Xcode's UI.
+    DEVELOPMENT_TEAM: ZF624KMD4U
 targets:
   BrunianLifts:
     type: application
