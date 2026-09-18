@@ -1,0 +1,7 @@
+
+# Exercise demo videos. Deliberately never committed: this repo is public and
+# GitHub Pages serves it to anyone, so anything in here would be published.
+# Files here are copied into the iOS app bundle only, which is signed to one
+# device and never distributed.
+demos-local/*
+!demos-local/README.txt

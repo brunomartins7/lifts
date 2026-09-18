@@ -213,6 +213,10 @@
     .tag{border:1px solid var(--line);border-radius:999px;background:var(--panel2);color:var(--ink2);font-family:var(--mono);font-size:11px;font-weight:700;padding:7px 11px;white-space:nowrap;transition:border-color .15s var(--e)}
     .media{margin-top:11px;border-radius:var(--r-sm);overflow:hidden;border:1px solid var(--line);background:var(--media-bg);position:relative;min-height:44px}
     .media img{display:block;width:100%;max-height:210px;object-fit:contain;background:transparent;filter:invert(1) hue-rotate(180deg) contrast(1.04);mix-blend-mode:screen}
+    /* A real video gets the plain dark plate — it is footage, not a white-plate
+       render, so it needs none of the blending the clips do. */
+    .media.video{background:var(--bg2);border-color:var(--line)}
+    .media video{display:block;width:100%;max-height:260px;background:#000}
     .media-fallback{display:none;padding:12px;color:var(--faint);font-size:12px}
     .media.failed{background:var(--panel2)}
     .media.failed .media-fallback{display:block;color:var(--faint)}

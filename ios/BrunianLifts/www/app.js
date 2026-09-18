@@ -2115,7 +2115,20 @@ function renderWorkout(){
   <div class="finish-bar"><div class="finish-inner"><button class="finish" data-action="finish">Finish session</button></div></div></div>`;
 }
 function renderGroup(g,dayIndex){return`<section class="group"><div class="group-head"><div><div class="group-name">${esc(g.id)} · ${esc(g.name)}</div><div class="group-rule">${esc(g.rule)}</div></div></div>${g.exercises.map(base=>({base,ex:sessionExercise(base)})).filter(x=>!state.session?.removedExercises?.includes(x.ex.id)).map(x=>renderExercise(x.ex,dayIndex,g.id,x.base.id)).join('')}</section>`}
+/* A demo video for this lift, when one has been put on the device. The list is
+   written into the app bundle at build time and is simply absent on the website,
+   where this fetch 404s once at boot and leaves the set empty — so the site goes
+   on showing the animated clip exactly as before. Videos are never committed:
+   this repo is public, and a file in it is a published file. */
+const DEMO_VIDEOS = new Set();
+fetch('demos/have.json',{cache:'no-store'})
+  .then(r=>r.ok?r.json():[])
+  .then(ids=>{ if(Array.isArray(ids)&&ids.length){ ids.forEach(i=>DEMO_VIDEOS.add(i)); render(); } })
+  .catch(()=>{});
+
 function renderMedia(ex){
+  if(DEMO_VIDEOS.has(ex.id))
+    return`<div class="media video"><video src="demos/${esc(ex.id)}.mp4" playsinline controls preload="metadata" poster="" onerror="this.parentElement.classList.add('failed');this.remove()"></video><span class="media-fallback">Demo unavailable — logging still works.</span></div>`;
   return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
 /* The coaching layer. Four blocks in the order you need them at the rack: set
    up, perform, what actually drives growth, and the mistake to avoid. Falls back
