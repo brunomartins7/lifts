@@ -5,3 +5,8 @@
 # device and never distributed.
 demos-local/*
 !demos-local/README.txt
+
+# The bundled copy of the videos. sync-web.sh writes these into the app bundle
+# on every build; committing them would put them straight back on the public
+# site, which is the one thing demos-local/ exists to prevent.
+ios/BrunianLifts/www/demos/

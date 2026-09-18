@@ -2128,7 +2128,12 @@ fetch('demos/have.json',{cache:'no-store'})
 
 function renderMedia(ex){
   if(DEMO_VIDEOS.has(ex.id))
-    return`<div class="media video"><video src="demos/${esc(ex.id)}.mp4" playsinline controls preload="metadata" poster="" onerror="this.parentElement.classList.add('failed');this.remove()"></video><span class="media-fallback">Demo unavailable — logging still works.</span></div>`;
+    /* Muted, looping and playing on its own, so it behaves like the animated
+       clip it replaces — glanceable without a tap — but with controls, so a
+       movement can be scrubbed and paused at the position that matters. The
+       files carry no audio track at all, so muted is a statement of intent
+       rather than a restriction. */
+    return`<div class="media video"><video src="demos/${esc(ex.id)}.mp4" playsinline autoplay muted loop controls preload="metadata" onerror="this.parentElement.classList.add('failed');this.remove()"></video><span class="media-fallback">Demo unavailable — logging still works.</span></div>`;
   return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
 /* The coaching layer. Four blocks in the order you need them at the rack: set
    up, perform, what actually drives growth, and the mistake to avoid. Falls back
@@ -2142,7 +2147,11 @@ function renderTechnique(ex){
      hide the decisive cue, no pauses, and a fixed depth. Where that has been
      checked frame by frame, the panel says so instead of implying the clip is
      a model to copy exactly. */
-  const demo=c.demo?`<div class="demo-note"><div class="coach-h">About this demo</div><p>${esc(c.demo)}</p></div>`:'';
+  /* The demo note describes the library's animated clip — which camera angle
+     hides what, where it cuts the range short. When a video of the lift has
+     been put on the device that clip is not what he is looking at any more, so
+     the note is describing something that is no longer on screen. */
+  const demo=(c.demo&&!DEMO_VIDEOS.has(ex.id))?`<div class="demo-note"><div class="coach-h">About this demo</div><p>${esc(c.demo)}</p></div>`:'';
   return renderMedia(ex)+demo
     +`<div class="coach">${bl('Set up',c.setup,'')}${bl('Perform the rep',c.execute,'')}${bl('What drives growth',c.grow,'grow')}${bl('Common mistakes',c.mistakes,'warn')}</div>`;
 }
