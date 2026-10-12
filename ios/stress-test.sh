@@ -29,6 +29,25 @@ for f in index.html app.js tokens.css manifest.webmanifest icon-192.png icon-512
 done
 [ ! -f "$APP/www/sw.js" ] && ok "no service worker bundled" || no "sw.js should not ship"
 
+echo "== 2b. the scheme handler can actually serve a video =="
+# Sixteen checks passed while every demo video was dead, because none of them
+# went through the app's own URL scheme — the videos were tested over
+# http://localhost in a browser, where Python's server sets the content type and
+# answers byte ranges for free. The handler did neither. These two assertions
+# are the cheap guard; ios/vcheck.html is the real one, loaded in the app and
+# reporting the response codes it actually gets.
+grep -q '"mp4":  *"video/mp4"' BrunianLifts/AppDelegate.swift \
+  && ok "handler declares video/mp4" \
+  || no "handler has no mp4 content type — a video served as octet-stream will not play"
+grep -q 'statusCode: 206' BrunianLifts/AppDelegate.swift \
+  && ok "handler answers byte ranges with 206" \
+  || no "handler has no range support — WebKit's media loader needs 206 or playback never starts"
+if ls "$root/demos-local"/*.mp4 >/dev/null 2>&1; then
+  want=$(ls -1 "$root/demos-local"/*.mp4 | wc -l | tr -d ' ')
+  got=$(ls -1 "$here/BrunianLifts/www/demos"/*.mp4 2>/dev/null | wc -l | tr -d ' ')
+  [ "$want" = "$got" ] && ok "all $want demo videos bundled" || no "only $got of $want demo videos reached the bundle"
+fi
+
 echo "== 3. boot a simulator and install =="
 DEV=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+[^(]*\([0-9A-F-]{36}\)' | grep -oE '[0-9A-F-]{36}') || true
 [ -n "${DEV:-}" ] || { no "no iPhone simulator available"; exit 1; }

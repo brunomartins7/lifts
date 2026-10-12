@@ -206,15 +206,20 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
     "webmanifest": "application/manifest+json",
     "png":  "image/png",
     "svg":  "image/svg+xml",
-    "gif":  "image/gif"
+    "gif":  "image/gif",
+    // Without these a video is served as application/octet-stream and WebKit
+    // refuses to play it. The demos were silently dead for exactly this reason.
+    "mp4":  "video/mp4",
+    "m4v":  "video/mp4",
+    "mov":  "video/quicktime",
+    "webm": "video/webm"
   ]
 
   func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
-    guard let url = task.request.url,
+    guard let url = task.request.url, url.host == appHost,
           let root = Bundle.main.url(forResource: "www", withExtension: nil) else {
       return fail(task, url: task.request.url)
     }
-    guard url.host == appHost else { return fail(task, url: url) }
     var rel = url.path
     if rel.isEmpty || rel == "/" { rel = "/index.html" }
     let target = root.appendingPathComponent(rel).standardizedFileURL
@@ -225,18 +230,69 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
     // also satisfy the prefix.
     let rootPath = root.standardizedFileURL.path
     guard target.path == rootPath || target.path.hasPrefix(rootPath + "/"),
-          let data = try? Data(contentsOf: target) else {
+          let total = (try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? Int) ?? nil,
+          let handle = try? FileHandle(forReadingFrom: target) else {
       return fail(task, url: url)
     }
+    defer { try? handle.close() }
 
     let mime = Self.types[target.pathExtension.lowercased()] ?? "application/octet-stream"
+
+    /* A video is not fetched the way a script is. WebKit's media loader asks for
+       byte ranges — it wants the moov atom, then it seeks — and a handler that
+       answers every request with the whole file and a 200 gives it nothing it
+       can use, so playback never starts. Answering the range it actually asked
+       for, with a 206, is what makes a <video> work on a custom scheme. */
+    if let header = task.request.value(forHTTPHeaderField: "Range"),
+       let (lower, upper) = Self.parseRange(header, total: total) {
+      let length = upper - lower + 1
+      if lower > 0 { try? handle.seek(toOffset: UInt64(lower)) }
+      let data = (try? handle.read(upToCount: length)) ?? Data()
+      let response = HTTPURLResponse(url: url, statusCode: 206, httpVersion: "HTTP/1.1",
+        headerFields: ["Content-Type": mime,
+                       "Content-Length": String(data.count),
+                       "Content-Range": "bytes \(lower)-\(upper)/\(total)",
+                       "Accept-Ranges": "bytes",
+                       "Cache-Control": "no-store"])!
+      task.didReceive(response)
+      task.didReceive(data)
+      task.didFinish()
+      return
+    }
+
+    let data = (try? handle.readToEnd()) ?? Data()
     let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1",
-                                   headerFields: ["Content-Type": mime,
-                                                  "Content-Length": String(data.count),
-                                                  "Cache-Control": "no-store"])!
+      headerFields: ["Content-Type": mime,
+                     "Content-Length": String(data.count),
+                     // Announced even on a whole-file reply: without it the media
+                     // loader may not try a range request at all.
+                     "Accept-Ranges": "bytes",
+                     "Cache-Control": "no-store"])!
     task.didReceive(response)
     task.didReceive(data)
     task.didFinish()
+  }
+
+  /* "bytes=0-1023", "bytes=1024-" and the suffix form "bytes=-500". Returns an
+     inclusive pair clamped to the file, or nil when the header is anything else
+     — in which case the caller sends the whole file, which is the correct
+     fallback for a range it does not understand. */
+  static func parseRange(_ header: String, total: Int) -> (Int, Int)? {
+    guard total > 0 else { return nil }
+    let spec = header.replacingOccurrences(of: " ", with: "")
+    guard spec.hasPrefix("bytes="), !spec.contains(",") else { return nil }
+    let parts = spec.dropFirst("bytes=".count).split(separator: "-", omittingEmptySubsequences: false)
+    guard parts.count == 2 else { return nil }
+    let first = String(parts[0]), last = String(parts[1])
+
+    if first.isEmpty {                               // bytes=-500 : the last 500 bytes
+      guard let n = Int(last), n > 0 else { return nil }
+      return (max(0, total - n), total - 1)
+    }
+    guard let lower = Int(first), lower < total else { return nil }
+    let upper = last.isEmpty ? total - 1 : min(Int(last) ?? total - 1, total - 1)
+    guard upper >= lower else { return nil }
+    return (lower, upper)
   }
 
   func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}

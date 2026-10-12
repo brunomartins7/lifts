@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{background:#0B0D12;color:#F2EFE7;font:13px -asystem,-apple-system;margin:0;padding:14px}
+#log{font:12px ui-monospace;white-space:pre-wrap;line-height:1.5}
+.ok{color:#7FCF9B}.bad{color:#E08585}video{width:180px;border:1px solid #57431F;border-radius:8px;display:block;margin:10px 0}</style>
+<div id="log"></div>
+<video id="v" playsinline muted loop controls preload="metadata" src="demos/barbell-bench-press.mp4"></video>
+<script>
+const L=(m,c)=>{const d=document.createElement('div');if(c)d.className=c;d.textContent=m;document.getElementById('log').appendChild(d)};
+L('origin: '+location.origin);
+fetch('demos/have.json',{cache:'no-store'})
+  .then(r=>{L('have.json HTTP '+r.status,r.ok?'ok':'bad');return r.ok?r.json():null})
+  .then(j=>L('have.json ids: '+(j?j.length:'none'),j&&j.length===18?'ok':'bad'))
+  .catch(e=>L('have.json FETCH FAILED: '+e.message,'bad'));
+fetch('demos/barbell-bench-press.mp4',{headers:{Range:'bytes=0-99'}})
+  .then(r=>{L('range request -> HTTP '+r.status+' content-range='+(r.headers.get('content-range')||'none'), r.status===206?'ok':'bad')})
+  .catch(e=>L('range FETCH FAILED: '+e.message,'bad'));
+const v=document.getElementById('v');
+v.addEventListener('loadedmetadata',()=>L('video metadata OK '+v.videoWidth+'x'+v.videoHeight+' dur='+v.duration.toFixed(1)+'s','ok'));
+v.addEventListener('canplay',()=>L('video CAN PLAY','ok'));
+v.addEventListener('playing',()=>L('video PLAYING','ok'));
+v.addEventListener('error',()=>L('video ERROR code='+(v.error&&v.error.code)+' '+(v.error&&v.error.message),'bad'));
+setTimeout(()=>{L('--- 10s: readyState='+v.readyState+' networkState='+v.networkState+' paused='+v.paused, v.readyState>=2?'ok':'bad'); v.play().catch(e=>L('play() rejected: '+e.message,'bad'));},10000);
+</script>
