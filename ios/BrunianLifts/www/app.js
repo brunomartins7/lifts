@@ -2133,7 +2133,7 @@ function renderMedia(ex){
        movement can be scrubbed and paused at the position that matters. The
        files carry no audio track at all, so muted is a statement of intent
        rather than a restriction. */
-    return`<div class="media video"><video src="demos/${esc(ex.id)}.mp4" playsinline autoplay muted loop controls preload="metadata" onerror="this.parentElement.classList.add('failed');this.remove()"></video><span class="media-fallback">Demo unavailable — logging still works.</span></div>`;
+    return`<div class="media video" data-video="${esc(ex.id)}"><span class="media-fallback">Demo unavailable — logging still works.</span></div>`;
   return`<div class="media"><img src="${CLIP_BASE+esc(ex.clip||'')}" alt="${esc(ex.name)} demo" loading="lazy" onerror="this.parentElement.classList.add('failed');this.remove()"><span class="media-fallback">Demo unavailable offline — logging still works.</span></div>`}
 /* The coaching layer. Four blocks in the order you need them at the rack: set
    up, perform, what actually drives growth, and the mistake to avoid. Falls back
@@ -2280,6 +2280,59 @@ function renderExercise(ex,dayIndex,groupId,baseId=ex.id){
 }
 /* Collapsible section. Native <details> does the work; the open set survives
    the full re-render that follows every logged set. */
+/* Media outlives the re-render that surrounds it.
+
+   render() replaces the entire screen with innerHTML. For a <video> written
+   into that markup it means the element is destroyed and rebuilt on every
+   logged set: playback restarts from zero each time, and WebKit tears down and
+   recreates a decoder — six at once on a workout screen, which took the web
+   content process to 800MB in a measured repro. A content process that dies
+   leaves a blank screen and the app has to be force-quit.
+
+   So the markup carries a placeholder and never an element. The element is
+   created once, lifted out before the wipe, put back after, and released the
+   moment it is no longer on screen. Only a panel that is actually open gets
+   one, so at most one video is ever live. This is the only place a <video> is
+   constructed; nothing else may write one into markup. */
+const liveVideos = new Map();          // id -> the element, detached across renders
+
+function harvestVideos(){
+  for(const v of app.querySelectorAll('video[data-video-id]')){
+    liveVideos.set(v.dataset.videoId, v);
+    v.remove();                        // detach, do not destroy
+  }
+}
+
+function mountVideos(){
+  const onScreen = new Set();
+  for(const slot of app.querySelectorAll('[data-video]')){
+    const id = slot.dataset.video;
+    const panel = slot.closest('details');
+    if(panel && !panel.open) continue; // a shut panel costs nothing
+    onScreen.add(id);
+    if(slot.querySelector('video')) continue;
+    let v = liveVideos.get(id);
+    if(!v){
+      v = document.createElement('video');
+      v.dataset.videoId = id;
+      v.src = `demos/${id}.mp4`;
+      v.playsInline = true; v.muted = true; v.loop = true; v.controls = true;
+      v.preload = 'metadata';
+      v.addEventListener('error', ()=>{ slot.classList.add('failed'); v.remove(); liveVideos.delete(id); });
+      liveVideos.set(id, v);
+    }
+    slot.appendChild(v);
+    const p = v.play(); if(p && p.catch) p.catch(()=>{});
+  }
+  /* Released here rather than left to the collector, so the decoder goes when
+     the picture does. */
+  for(const [id,v] of liveVideos){
+    if(onScreen.has(id)) continue;
+    try{ v.pause(); v.removeAttribute('src'); v.load(); }catch(_){}
+    liveVideos.delete(id);
+  }
+}
+
 const openPanels = new Set();
 function panel(key,label,body){return`<details class="ex-panel" data-panel="${esc(key)}"${openPanels.has(key)?' open':''}><summary>${esc(label)}</summary><div class="ex-panel-body">${body}</div></details>`}
 function renderWarmups(ex,warmups){return`<div class="warmup-box"><div class="warmup-title">Warmup ramp</div>${warmups.map((w,i)=>`<div class="warmrow"><div class="prev">WU ${i+1}</div><div class="warm-step"><button data-action="step" data-ex="${ex.id}" data-kind="warmWeight" data-index="${i}" data-dir="-1" aria-label="Decrease warmup weight">−</button><div class="warm-val mono">${fmtKg(w.weight)}</div><button data-action="step" data-ex="${ex.id}" data-kind="warmWeight" data-index="${i}" data-dir="1" aria-label="Increase warmup weight">+</button></div><div class="warm-step"><button data-action="step" data-ex="${ex.id}" data-kind="warmReps" data-index="${i}" data-dir="-1" aria-label="Decrease warmup reps">−</button><div class="warm-val mono">${w.reps}</div><button data-action="step" data-ex="${ex.id}" data-kind="warmReps" data-index="${i}" data-dir="1" aria-label="Increase warmup reps">+</button></div><button class="warm-log ${w.done?'is-done':''}" data-action="log-warmup" data-ex="${ex.id}" data-index="${i}">${w.done?'✓':'Log'}</button></div>`).join('')}</div>`}
@@ -2523,7 +2576,9 @@ function render(){
       ? JSON.stringify({n:act.dataset.num||'',e:act.dataset.ex||'',i:act.dataset.index||'',f:act.dataset.programField||'',s:act.dataset.search||'',y:act.dataset.syncField||'',t:act.dataset.setting||''})
       : null;
     const caret=focusKey&&typeof act.selectionStart==='number'?[act.selectionStart,act.selectionEnd]:null;
+    harvestVideos();                 // keep the elements, lose only the markup
     app.innerHTML=(pages[view]||renderHome)()+renderConfirm();
+    mountVideos();
     if(focusKey){
       const k=JSON.parse(focusKey);
       const sel=k.n?`[data-num="${k.n}"][data-ex="${k.e}"]${k.i!==''?`[data-index="${k.i}"]`:''}`
@@ -2644,6 +2699,8 @@ app.addEventListener('input',e=>{
 app.addEventListener('toggle',e=>{
   const d=e.target; if(!d||!d.dataset||!d.dataset.panel)return;
   d.open?openPanels.add(d.dataset.panel):openPanels.delete(d.dataset.panel);
+  mountVideos();                       // a panel opening is when a video starts
+
 },true);
 app.addEventListener('change',e=>{const t=e.target;if(t.dataset.num){setDirect(t.dataset.ex,t.dataset.num,Number(t.dataset.index||0),t.value);render()}});
 

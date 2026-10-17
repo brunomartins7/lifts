@@ -43,6 +43,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 final class WebAppViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate {
   private var webView: WKWebView!
   private var exportURL: URL?
+  private var recoveries = 0
 
   override func loadView() {
     let config = WKWebViewConfiguration()
@@ -122,6 +123,22 @@ final class WebAppViewController: UIViewController, WKNavigationDelegate, WKUIDe
 
   func webView(_ webView: WKWebView, navigationResponse: WKNavigationResponse, didBecome download: WKDownload) {
     download.delegate = self
+  }
+
+  /* When WebKit's content process dies — memory pressure, a decoder falling
+     over, anything — the web view does not show an error. It goes blank and
+     stays blank, and the only way back is to force-quit the app and reopen it.
+     That is the "keeps crashing, forcing reload" shape exactly. Reloading on
+     the spot turns a dead app into a flicker. Nothing is lost by reloading:
+     the ledger lives in storage, not in the page.
+
+     It is logged rather than swallowed, so if this starts firing often the
+     Console says so instead of it looking like an app that occasionally
+     blinks. */
+  func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+    recoveries += 1
+    NSLog("[Lifts] web content process terminated (%d this launch) — reloading", recoveries)
+    load()
   }
 
   // A blank-target link would otherwise open nothing at all.
