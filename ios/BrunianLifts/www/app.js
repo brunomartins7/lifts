@@ -1555,6 +1555,9 @@ function finishSession(force=false){
   state.session=null;openDay=state.currentDayIndex;view='report';confirmBox=null;
   clearRest(); holdWake(false); snapshot();
   save(); if(Sync.configured()&&state.settings.autoSync)Sync.push('finish');
+  /* Finishing a session is the moment there is something new worth keeping, and
+     the only moment the write is certain not to interrupt anything. */
+  FolderBackup.write().then(okay=>{ if(!okay && FolderBackup.configured) render(); });
   jumpTop();render();
 }
 function deleteSession(id){
@@ -2333,6 +2336,59 @@ function mountVideos(){
   }
 }
 
+/* Backup to a folder, with no account and no token.
+
+   Only the iOS wrapper provides this — the bridge is absent in a browser and
+   FolderBackup.available stays false, so the website is untouched and keeps the
+   gist sync. Nothing here is ever reported as succeeding on optimism: every
+   claim this makes comes from the native reply, because a backup believed to be
+   working and silently not is worse than having none. */
+const FolderBackup = {
+  available:false, configured:false, folder:'', lastWrite:0, lastError:'',
+  get bridge(){ return window.webkit?.messageHandlers?.backup || null; },
+  async call(op, extra){
+    if(!this.bridge) throw new Error('not running in the app');
+    return await this.bridge.postMessage({op, ...(extra||{})});
+  },
+  async refresh(){
+    if(!this.bridge) { this.available=false; return; }
+    try{
+      const r = await this.call('status');
+      this.available=true; this.configured=!!r.configured;
+      this.folder=r.folder||''; this.lastWrite=r.lastWrite||0;
+    }catch(_){ this.available=false; }
+  },
+  async choose(){
+    try{ const r=await this.call('choose'); this.configured=true; this.folder=r.folder||''; this.lastError='';
+         await this.write(); }
+    catch(e){ if(String(e.message||e)!=='cancelled') this.lastError=String(e.message||e); }
+    render();
+  },
+  async write(){
+    if(!this.bridge || !this.configured) return false;
+    try{
+      const r = await this.call('write', {json: JSON.stringify(state)});
+      this.lastWrite = r.at || Date.now(); this.lastError=''; return true;
+    }catch(e){ this.lastError = String(e.message||e); return false; }
+  },
+  async restore(){
+    try{
+      const r = await this.call('read');
+      const incoming = JSON.parse(r.json);
+      if(!incoming || typeof incoming!=='object' || !Array.isArray(incoming.sessions))
+        throw new Error('that file is not a Brunian Lifts backup');
+      confirmBox = {
+        title:'Restore from the backup file?',
+        text:`It holds ${incoming.sessions.length} session${incoming.sessions.length===1?'':'s'}. This replaces everything on this device.`,
+        ok:'Restore', danger:true,
+        onYes:()=>{ snapshot('pre-folder-restore'); state = migrate(incoming); save();
+                    confirmBox=null; flash('Restored from the backup file.'); render(); }
+      };
+      render();
+    }catch(e){ this.lastError = String(e.message||e); flash('Restore failed — '+this.lastError); render(); }
+  }
+};
+
 const openPanels = new Set();
 function panel(key,label,body){return`<details class="ex-panel" data-panel="${esc(key)}"${openPanels.has(key)?' open':''}><summary>${esc(label)}</summary><div class="ex-panel-body">${body}</div></details>`}
 function renderWarmups(ex,warmups){return`<div class="warmup-box"><div class="warmup-title">Warmup ramp</div>${warmups.map((w,i)=>`<div class="warmrow"><div class="prev">WU ${i+1}</div><div class="warm-step"><button data-action="step" data-ex="${ex.id}" data-kind="warmWeight" data-index="${i}" data-dir="-1" aria-label="Decrease warmup weight">−</button><div class="warm-val mono">${fmtKg(w.weight)}</div><button data-action="step" data-ex="${ex.id}" data-kind="warmWeight" data-index="${i}" data-dir="1" aria-label="Increase warmup weight">+</button></div><div class="warm-step"><button data-action="step" data-ex="${ex.id}" data-kind="warmReps" data-index="${i}" data-dir="-1" aria-label="Decrease warmup reps">−</button><div class="warm-val mono">${w.reps}</div><button data-action="step" data-ex="${ex.id}" data-kind="warmReps" data-index="${i}" data-dir="1" aria-label="Increase warmup reps">+</button></div><button class="warm-log ${w.done?'is-done':''}" data-action="log-warmup" data-ex="${ex.id}" data-index="${i}">${w.done?'✓':'Log'}</button></div>`).join('')}</div>`}
@@ -2500,6 +2556,13 @@ function renderData(){
   return `<div class="shell"><div id="toast-slot">${renderToast()}</div>${renderHead('data')}
   <section class="hero"><div class="eyebrow">Data center</div><div class="title">One ledger, every device</div><div class="sub">Cloud sync keeps phone and laptop identical. Snapshots and exports protect against everything else.</div></section>
   ${renderRecoveryBanner()}${renderHealthBanner()}
+  ${FolderBackup.available?`<div class="card"><div class="row" style="padding-top:0"><div><strong>Backup folder ${FolderBackup.configured?'· on':'· not set up'}</strong><div class="small faint">${FolderBackup.configured
+      ? `Saving to ${esc(FolderBackup.folder)} after every session${FolderBackup.lastWrite?` · last written ${relTime(FolderBackup.lastWrite)}`:' · nothing written yet'}`
+      : 'Pick a folder once — choose one in iCloud Drive and iCloud keeps the copy. No account, no token.'}</div></div><div class="pill">${FolderBackup.configured?(FolderBackup.lastError?'Failing':'On'):'Off'}</div></div>
+    ${FolderBackup.lastError?`<div class="banner bad" style="margin:2px 0 10px"><div>Last attempt failed — ${esc(FolderBackup.lastError)}</div></div>`:''}
+    <div class="session-actions" style="margin-top:12px"><button class="secondary gold" data-action="folder-choose">${FolderBackup.configured?'Change folder':'Choose folder'}</button>${FolderBackup.configured?`<button class="secondary" data-action="folder-write">Back up now</button><button class="secondary" data-action="folder-restore">Restore from folder</button>`:''}</div>
+    <div class="small faint" style="margin-top:10px">This writes one file, brunian-lifts.json. It never leaves your own storage and there is nothing to sign in to.</div>
+  </div>`:''}
   <div class="card"><div class="row" style="padding-top:0"><div><strong>Cloud sync ${conf?'· on':'· not set up'}</strong><div class="small faint">${conf?`Auto-sync ${state.settings.autoSync?'enabled':'paused'} · last sync ${state.settings.lastSyncAt?relTime(new Date(state.settings.lastSyncAt).getTime()):'never'}`:'Two minutes, once: your data then follows you to any device and any URL.'}</div></div>${renderSyncChip()}</div>
     ${conf?'':`<ol class="feedback-list"><li>On github.com → Settings → Developer settings → Fine-grained tokens, create a token whose only permission is Gists: read and write. Give it nothing else — the recovery link below carries this token, so its permissions are the blast radius if the link ever leaks.</li><li>Paste it below and press Save to cloud — a private gist is created and its ID fills in automatically.</li><li>On your other device, paste the same token and gist ID, then press Load from cloud once.</li></ol>`}
     <div class="field" style="margin-top:10px"><label>GitHub token</label><input type="password" data-sync-field="gistToken" value="${esc(state.settings.gistToken||'')}" placeholder="Fine-grained token with gist access" autocomplete="off"></div>
@@ -2666,6 +2729,9 @@ app.addEventListener('click',e=>{
   else if(a==='snap-now'){snapshot();render();flash('Snapshot saved.')}
   else if(a==='snap-restore'){const key=t.dataset.key;confirmBox={title:'Restore this snapshot?',text:'Current data is snapshotted first as pre-restore, then replaced by the selected snapshot.',ok:'Restore snapshot',danger:false,onYes:()=>{confirmBox=null;restoreSnapshot(key)}};render()}
   else if(a==='crash-export'){try{download(`brunian-lifts-raw-${today()}.json`,STORAGE.getItem(KEY)||STORAGE.getItem(QUARANTINE_KEY)||JSON.stringify(state),'application/json')}catch(_){}}
+  else if(a==='folder-choose')FolderBackup.choose();
+  else if(a==='folder-write'){FolderBackup.write().then(okay=>{flash(okay?'Backed up.':'Backup failed — '+FolderBackup.lastError);render()})}
+  else if(a==='folder-restore')FolderBackup.restore();
   else if(a==='crash-reload')location.reload();
   else if(a==='confirm-cancel'){confirmBox=null;render()}
   else if(a==='confirm-ok'){const fn=confirmBox&&confirmBox.onYes;confirmBox=null;if(fn)fn();else render()}
@@ -2796,6 +2862,9 @@ if(state.settings.autoSync&&state.settings.gistToken&&state.settings.gistId){
 }
 
 /* Offline shell: register the service worker. No-op on file:// or unsupported browsers. */
+/* The card cannot know whether the wrapper is hosting it until it asks. */
+FolderBackup.refresh().then(()=>{ if(FolderBackup.available) render(); });
+
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').catch(()=>{})});
 }

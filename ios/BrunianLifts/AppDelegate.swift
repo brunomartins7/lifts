@@ -1,5 +1,6 @@
 import UIKit
 import WebKit
+import UniformTypeIdentifiers
 
 /*  Brunian Lifts, wrapped.
 
@@ -58,6 +59,17 @@ final class WebAppViewController: UIViewController, WKNavigationDelegate, WKUIDe
        is unavailable and the screen would sleep between sets — something the
        website does not do. The same request arrives on this channel instead. */
     config.userContentController.add(WakeBridge.shared, name: "wake")
+
+    /* Backing up without an account. Setting up the GitHub sync meant creating a
+       fine-grained token and pasting it with a gist id, on a phone, which is a
+       miserable thing to ask of anyone. iCloud proper is not available here —
+       that capability needs the paid developer programme — but the document
+       picker grants sandboxed access to any location the user chooses, iCloud
+       Drive included, with no entitlement and no account. He picks a folder
+       once; the ledger is written there on every save and iCloud carries it. */
+    // A replying handler registers differently: postMessage returns a promise on
+    // the JS side, which is what lets the web app wait for the real result.
+    config.userContentController.addScriptMessageHandler(BackupBridge.shared, contentWorld: .page, name: "backup")
 
     let web = WKWebView(frame: .zero, configuration: config)
     web.navigationDelegate = self
@@ -209,6 +221,105 @@ final class WakeBridge: NSObject, WKScriptMessageHandler {
   @objc private func background() { UIApplication.shared.isIdleTimerDisabled = false }
   @objc private func foreground() { apply() }
   private func apply() { UIApplication.shared.isIdleTimerDisabled = wanted }
+}
+
+/*  Writes the ledger to a folder the user picked once.
+
+    The access comes from the pick itself: UIDocumentPicker hands back a
+    security-scoped URL, and a bookmark made from it survives relaunches, so
+    there is nothing to sign in to and no token to keep. If that folder is in
+    iCloud Drive then iCloud does the syncing, which is the whole trick.
+
+    Every reply carries what actually happened. The web app is not allowed to
+    claim a backup succeeded on optimism — a backup that silently stopped
+    working is worse than none, because it is trusted. */
+final class BackupBridge: NSObject, WKScriptMessageHandlerWithReply, UIDocumentPickerDelegate {
+  static let shared = BackupBridge()
+  private let bookmarkKey = "backupFolderBookmark"
+  private var pickReply: ((Any?, String?) -> Void)?
+
+  private var folder: URL? {
+    guard let data = UserDefaults.standard.data(forKey: bookmarkKey) else { return nil }
+    var stale = false
+    guard let url = try? URL(resolvingBookmarkData: data, bookmarkDataIsStale: &stale) else { return nil }
+    if stale, let fresh = try? url.bookmarkData() { UserDefaults.standard.set(fresh, forKey: bookmarkKey) }
+    return url
+  }
+
+  func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage,
+                             replyHandler: @escaping (Any?, String?) -> Void) {
+    let body = message.body as? [String: Any] ?? [:]
+    switch body["op"] as? String ?? "" {
+    case "status":
+      replyHandler(["available": true, "folder": folder?.lastPathComponent ?? "",
+                    "configured": folder != nil, "lastWrite": UserDefaults.standard.double(forKey: "backupLastWrite")], nil)
+    case "choose":
+      pickReply = replyHandler
+      let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
+      picker.delegate = self
+      picker.allowsMultipleSelection = false
+      topController()?.present(picker, animated: true)
+    case "write":
+      guard let json = body["json"] as? String else { return replyHandler(nil, "nothing to write") }
+      write(json, replyHandler)
+    case "read":
+      read(replyHandler)
+    default:
+      replyHandler(nil, "unknown operation")
+    }
+  }
+
+  private func write(_ json: String, _ reply: @escaping (Any?, String?) -> Void) {
+    guard let dir = folder else { return reply(nil, "no folder chosen yet") }
+    guard dir.startAccessingSecurityScopedResource() else { return reply(nil, "that folder is no longer reachable — choose it again") }
+    defer { dir.stopAccessingSecurityScopedResource() }
+    let target = dir.appendingPathComponent("brunian-lifts.json")
+    var failure: String?
+    /* Coordinated because the folder may be in iCloud Drive and something else
+       may be reading it; atomic so a half-written ledger can never replace a
+       whole one. */
+    NSFileCoordinator().coordinate(writingItemAt: target, options: .forReplacing, error: nil) { url in
+      do { try Data(json.utf8).write(to: url, options: .atomic) }
+      catch { failure = error.localizedDescription }
+    }
+    if let failure { return reply(nil, failure) }
+    UserDefaults.standard.set(Date().timeIntervalSince1970 * 1000, forKey: "backupLastWrite")
+    reply(["bytes": json.utf8.count, "at": Date().timeIntervalSince1970 * 1000], nil)
+  }
+
+  private func read(_ reply: @escaping (Any?, String?) -> Void) {
+    guard let dir = folder else { return reply(nil, "no folder chosen yet") }
+    guard dir.startAccessingSecurityScopedResource() else { return reply(nil, "that folder is no longer reachable — choose it again") }
+    defer { dir.stopAccessingSecurityScopedResource() }
+    let target = dir.appendingPathComponent("brunian-lifts.json")
+    var json: String?
+    var failure: String?
+    NSFileCoordinator().coordinate(readingItemAt: target, options: [], error: nil) { url in
+      do { json = String(data: try Data(contentsOf: url), encoding: .utf8) }
+      catch { failure = "no backup in that folder yet" }
+    }
+    if let json { reply(["json": json], nil) } else { reply(nil, failure ?? "could not read the backup") }
+  }
+
+  func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+    defer { pickReply = nil }
+    guard let url = urls.first, let data = try? url.bookmarkData() else {
+      return pickReply?(nil, "could not keep access to that folder") ?? ()
+    }
+    UserDefaults.standard.set(data, forKey: bookmarkKey)
+    pickReply?(["folder": url.lastPathComponent], nil)
+  }
+
+  func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+    pickReply?(nil, "cancelled"); pickReply = nil
+  }
+
+  private func topController() -> UIViewController? {
+    var top = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?
+      .windows.first(where: { $0.isKeyWindow })?.rootViewController
+    while let presented = top?.presentedViewController { top = presented }
+    return top
+  }
 }
 
 /*  Serves the bundled copy of the web app. Kept deliberately narrow: it only

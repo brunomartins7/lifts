@@ -1,0 +1,25 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{background:#0B0D12;color:#F2EFE7;font:13px ui-monospace;margin:0;padding:14px}
+div{line-height:1.5}.ok{color:#7FCF9B}.bad{color:#E08585}</style><div id="log"></div>
+<script>
+const L=(m,c)=>{const d=document.createElement('div');if(c)d.className=c;d.textContent=m;document.getElementById('log').appendChild(d)};
+const bridge = window.webkit?.messageHandlers?.backup || null;
+L('bridge present: '+!!bridge, bridge?'ok':'bad');
+(async()=>{
+  if(!bridge) return;
+  try{ const r = await bridge.postMessage({op:'status'});
+       L('status -> available='+r.available+' configured='+r.configured+' folder="'+r.folder+'"','ok'); }
+  catch(e){ L('status THREW: '+e.message,'bad'); }
+  // No folder chosen yet, so this must FAIL and say why — a silent success here
+  // would be the exact bug the design is meant to prevent.
+  try{ const r = await bridge.postMessage({op:'write', json:'{"sessions":[]}'});
+       L('write with no folder WRONGLY SUCCEEDED: '+JSON.stringify(r),'bad'); }
+  catch(e){ L('write with no folder correctly refused: "'+e.message+'"','ok'); }
+  try{ await bridge.postMessage({op:'read'});
+       L('read with no folder WRONGLY SUCCEEDED','bad'); }
+  catch(e){ L('read with no folder correctly refused: "'+e.message+'"','ok'); }
+  try{ await bridge.postMessage({op:'nonsense'});
+       L('unknown op WRONGLY SUCCEEDED','bad'); }
+  catch(e){ L('unknown op refused: "'+e.message+'"','ok'); }
+})();
+</script>
